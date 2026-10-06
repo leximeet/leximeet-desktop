@@ -100,4 +100,50 @@ async function failFirstConfirmedDraftSave(desktop, wordId) {
   };
 }
 
-module.exports = { failFirstConfirmedDraftSave };
+/**
+ * 暂停指定题型首次草稿的真实 IPC 转发，复现题目已显示、会话尚未就绪的窗口。
+ * 放行后仍调用原 handler 落盘；不伪造草稿、计分或教学状态。
+ */
+async function holdFirstPracticeDraftSave(desktop, mode) {
+  if (!["word-list", "copy", "listening", "meaning-choice"].includes(mode))
+    throw new Error("草稿等待必须指定本例验证的练习模式");
+  await desktop.app.evaluate(({ ipcMain }, selectedMode) => {
+    if (process.env.LEXIMEET_PROFILE !== "test")
+      throw new Error("草稿等待只能注入隔离 test profile");
+    const channel = "leximeet:desktopCommand";
+    const original = ipcMain._invokeHandlers.get(channel);
+    if (typeof original !== "function") throw new Error("未找到真实桌面命令 handler");
+    const evidence = { held: false, forwarded: false, succeeded: false };
+    let release;
+    let restored = false;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    function restore() {
+      if (restored) return;
+      restored = true;
+      release();
+      ipcMain.removeHandler(channel);
+      ipcMain.handle(channel, original);
+    }
+    globalThis.__leximeetPracticeDraftGate = { evidence, release, restore };
+    ipcMain.removeHandler(channel);
+    ipcMain.handle(channel, async (event, payload) => {
+      if (evidence.held || payload?.action !== "practiceSave" || payload.mode !== selectedMode)
+        return original(event, payload);
+      evidence.held = true;
+      await gate;
+      evidence.forwarded = true;
+      const response = await original(event, payload);
+      evidence.succeeded = response?.ok === true;
+      return response;
+    });
+  }, mode);
+  return {
+    snapshot: () => desktop.app.evaluate(() => globalThis.__leximeetPracticeDraftGate.evidence),
+    release: () => desktop.app.evaluate(() => globalThis.__leximeetPracticeDraftGate.release()),
+    restore: () => desktop.app.evaluate(() => globalThis.__leximeetPracticeDraftGate.restore()),
+  };
+}
+
+module.exports = { failFirstConfirmedDraftSave, holdFirstPracticeDraftSave };

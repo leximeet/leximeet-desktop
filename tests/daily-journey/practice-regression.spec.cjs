@@ -5,7 +5,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { dropFirstWordListAck } = require("../helpers/practice-ack-loss.cjs");
 const { dropFirstConfirmedHintRead } = require("../helpers/hint-read-loss.cjs");
-const { failFirstConfirmedDraftSave } = require("../helpers/practice-save-loss.cjs");
+const {
+  failFirstConfirmedDraftSave,
+  holdFirstPracticeDraftSave,
+} = require("../helpers/practice-save-loss.cjs");
 const { personalFacts, attachJson } = require("../helpers/journey-evidence.cjs");
 
 function executable() {
@@ -156,6 +159,70 @@ test("已记分反馈须解锁重开，自动换词清空旧正确状态且保�
   await expect(input).toBeEditable();
   await expect(input).toHaveValue("");
   await expect(page.getByRole("alert")).toHaveCount(0);
+  // 重新进入会恢复题型；与切换题型不同，此时只有 loading、没有 transitioning。
+  for (const [mode, label] of [
+    ["listening", "听音辨词"],
+    ["meaning-choice", "看词选义"],
+  ]) {
+    await page.getByRole("tab", { name: label, exact: true }).click();
+    await expect(restart).toBeEnabled();
+    if (mode === "listening") {
+      await input.fill("unfinished");
+      await expect
+        .poll(async () => {
+          const position = await page.evaluate(async () => {
+            const request = { scope: "library", mode: "listening" };
+            const current = await window.leximeet.desktopQuery({ kind: "practice", ...request });
+            const rows = await window.leximeet.desktopQuery({
+              kind: "practiceWords",
+              ...request,
+              offset: current.cursor,
+              limit: 1,
+            });
+            return window.leximeet.desktopQuery({
+              kind: "practice",
+              ...request,
+              wordId: rows.words[0].id,
+            });
+          });
+          return position.draft.input;
+        })
+        .toBe("unfinished");
+    }
+    await page.locator('[data-guide="nav-library"]').click();
+    const draft = await holdFirstPracticeDraftSave(desktop, mode);
+    try {
+      await page.locator('[data-guide="nav-practice"]').click();
+      await expect.poll(async () => (await draft.snapshot()).held).toBe(true);
+      await expect(page.getByRole("tab", { name: label, exact: true })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      const hint = page.getByRole("button", { name: "提示", exact: true });
+      await expect(hint).toBeDisabled();
+      if (mode === "listening") {
+        await expect(input).toHaveValue("unfinished");
+        await expect(input).toBeDisabled();
+        await expect(page.getByRole("button", { name: "确认答案", exact: true })).toBeDisabled();
+      } else {
+        await expect(page.locator(".meaning-choice")).toHaveCount(4);
+        for (const choice of await page.locator(".meaning-choice").all())
+          await expect(choice).toBeDisabled();
+      }
+      await draft.release();
+      await expect(hint).toBeEnabled();
+      if (mode === "listening") {
+        await expect(input).toBeEditable();
+        await expect(page.getByRole("button", { name: "确认答案", exact: true })).toBeEnabled();
+        await input.fill("");
+      } else
+        for (const choice of await page.locator(".meaning-choice").all())
+          await expect(choice).toBeEnabled();
+      expect((await draft.snapshot()).succeeded).toBe(true);
+    } finally {
+      await draft.restore();
+    }
+  }
   await testInfo.attach("practice-real-state", {
     body: Buffer.from(
       JSON.stringify(await page.evaluate(() => window.leximeet.desktopState()), null, 2),
@@ -204,17 +271,51 @@ test("教学临摹成功导航后再进入练习，已确认草稿不能残留�
     await page.getByRole("button", { name: "进入教学", exact: true }).click();
     await page.locator(".guide-step-action button:last-child").click();
     await page.getByRole("button", { name: "下一步：设置计划", exact: true }).click();
-    await page.getByRole("button", { name: "保存学习规划", exact: true }).click();
-    // 规划提交会异步导航并重新安装教学操作范围；等实际步骤就绪再执行其要求的反馈。
-    await expect(page.locator(".guide-coach")).toContainText("回想一个单词");
-    await expect(page.getByRole("dialog", { name: "设置学习规划", exact: true })).toHaveCount(0);
-    await page
-      .locator('[data-guide="practice-row"]')
-      .getByRole("button", { name: "熟练 +1", exact: true })
-      .click();
+    const listDraft = await holdFirstPracticeDraftSave(desktop, "word-list");
+    try {
+      await page.getByRole("button", { name: "保存学习规划", exact: true }).click();
+      await expect(page.locator(".guide-coach")).toContainText("回想一个单词");
+      await expect(page.getByRole("dialog", { name: "设置学习规划", exact: true })).toHaveCount(0);
+      await expect.poll(async () => (await listDraft.snapshot()).held).toBe(true);
+      const firstRow = page.locator('[data-guide="practice-row"]');
+      await expect(firstRow).toBeVisible();
+      const waitingPath = testInfo.outputPath("evidence", "practice-list-loading.png");
+      fs.mkdirSync(path.dirname(waitingPath), { recursive: true });
+      await page.screenshot({ path: waitingPath, animations: "disabled", scale: "css" });
+      await testInfo.attach("practice-list-loading", {
+        path: waitingPath,
+        contentType: "image/png",
+      });
+      // 行已可见不能冒充可操作；首次草稿落盘前的点击会被 session.loading 拒绝。
+      await expect(firstRow.getByRole("button", { name: "熟练 +1", exact: true })).toBeDisabled();
+      await expect(firstRow.getByRole("button", { name: "不熟悉 −1", exact: true })).toBeDisabled();
+      await expect(firstRow.getByRole("button", { name: "揭示中文", exact: true })).toBeDisabled();
+      await listDraft.release();
+      await firstRow.getByRole("button", { name: "熟练 +1", exact: true }).click();
+      expect((await listDraft.snapshot()).succeeded).toBe(true);
+    } finally {
+      await listDraft.restore();
+    }
     await expect(page.locator(".guide-coach")).toContainText("听单词发音");
-    await page.getByRole("button", { name: "美式", exact: true }).click();
-    await expect(page.locator(".guide-coach")).toContainText("试一次单词临摹");
+    const copyDraft = await holdFirstPracticeDraftSave(desktop, "copy");
+    try {
+      await page.getByRole("button", { name: "美式", exact: true }).click();
+      await expect(page.locator(".guide-coach")).toContainText("试一次单词临摹");
+      await expect.poll(async () => (await copyDraft.snapshot()).held).toBe(true);
+      const input = page.getByRole("textbox", { name: "练习答案", exact: true });
+      await expect(input).toBeVisible();
+      const waitingPath = testInfo.outputPath("evidence", "practice-copy-loading.png");
+      await page.screenshot({ path: waitingPath, animations: "disabled", scale: "css" });
+      await testInfo.attach("practice-copy-loading", {
+        path: waitingPath,
+        contentType: "image/png",
+      });
+      await expect(input, "首次临摹草稿保存期间不能接受又静默丢弃键入").toBeDisabled();
+      await copyDraft.release();
+      await expect(input).toBeEditable();
+    } finally {
+      await copyDraft.restore();
+    }
     const word = (await page.locator(".spelling-letters").innerText()).trim();
     const before = await detail(page, word);
     const beforeFacts = personalFacts(desktop.profileDir);

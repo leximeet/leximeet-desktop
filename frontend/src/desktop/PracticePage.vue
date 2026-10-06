@@ -270,7 +270,12 @@ onBeforeUnmount(() => {
     >
       <p>保存当前草稿，再切换范围。</p>
       <div class="row">
-        <button class="button small primary" @click="switchRange(pendingRange)"> 保存并切换</button
+        <button
+          class="button small primary"
+          :disabled="loading || submitting || transitioning"
+          @click="switchRange(pendingRange)"
+        >
+          保存并切换</button
         ><button class="text-button" @click="pendingRange = ''"> 继续当前范围 </button>
       </div>
     </div>
@@ -314,7 +319,12 @@ onBeforeUnmount(() => {
       <Icon name="check" />
       <h2>已完成本轮练习</h2>
       <p>可以换一种方式，或再回想一轮。</p>
-      <button class="button" @click="restartRound">再练一轮</button>
+      <button
+        class="button"
+        :disabled="loading || submitting || transitioning"
+        @click="restartRound"
+        >再练一轮</button
+      >
     </section>
     <section
       v-else-if="mode === 'word-list'"
@@ -357,6 +367,7 @@ onBeforeUnmount(() => {
                 <button
                   v-if="hidden === 'word' && !isRevealed(item)"
                   class="word-mask"
+                  :disabled="loading || submitting || transitioning"
                   @click="reveal(item)"
                   :data-guide="index === 0 ? 'practice-reveal' : undefined"
                   aria-label="揭示英文"
@@ -368,6 +379,7 @@ onBeforeUnmount(() => {
                 <button
                   v-if="hidden === 'meaning' && !isRevealed(item)"
                   class="word-mask"
+                  :disabled="loading || submitting || transitioning"
                   @click="reveal(item)"
                   :data-guide="index === 0 ? 'practice-reveal' : undefined"
                   aria-label="揭示中文"
@@ -393,13 +405,13 @@ onBeforeUnmount(() => {
                 >
                   <button
                     class="button small primary"
-                    :disabled="submitting || transitioning || !!finished(item)"
+                    :disabled="loading || submitting || transitioning || !!finished(item)"
                     @click="signal(item, 'familiar')"
                   >
                     熟练 +1</button
                   ><button
                     class="button small"
-                    :disabled="submitting || transitioning || !!finished(item)"
+                    :disabled="loading || submitting || transitioning || !!finished(item)"
                     @click="signal(item, 'unfamiliar')"
                   >
                     不熟悉 −1
@@ -446,7 +458,7 @@ onBeforeUnmount(() => {
       <p>这个词暂不适合当前练习方式。</p>
       <button
         class="button"
-        :disabled="cursor + 1 >= total || loading || transitioning"
+        :disabled="cursor + 1 >= total || loading || submitting || transitioning"
         @click="next()"
       >
         下一词
@@ -506,7 +518,7 @@ onBeforeUnmount(() => {
           :answer="answer"
           :copy="mode === 'copy'"
           :hint="assisted"
-          :disabled="submitting || transitioning || pendingFeedback"
+          :disabled="loading || submitting || transitioning || pendingFeedback"
           :correct="answered === true"
           @update="typing"
           @type="keySound"
@@ -516,7 +528,7 @@ onBeforeUnmount(() => {
           v-if="answered !== true && !['copy', 'recall'].includes(mode)"
           class="button primary answer-submit"
           type="submit"
-          :disabled="submitting || answered === true || !input.trim()"
+          :disabled="loading || submitting || transitioning || answered === true || !input.trim()"
         >
           确认答案
         </button>
@@ -550,7 +562,7 @@ onBeforeUnmount(() => {
         ><button
           v-if="answered !== true && mode !== 'copy'"
           class="text-button"
-          :disabled="submitting || transitioning"
+          :disabled="loading || submitting || transitioning"
           @click="hint"
         >
           提示</button
