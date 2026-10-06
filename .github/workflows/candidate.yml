@@ -10,6 +10,11 @@ on:
         type: string
         required: false
         default: ""
+      release_tag:
+        description: "可选：恢复尚无 Release 的正式注解标签，如 1.0.0；不移动标签"
+        type: string
+        required: false
+        default: ""
       previous_candidate_run_id:
         description: "可选：同仓已成功的旧 Desktop candidate run ID；版本必须低于本次版本"
         type: string
@@ -33,12 +38,18 @@ jobs:
   preflight:
     runs-on: macos-15
     timeout-minutes: 5
+    outputs:
+      source_ref: ${{ steps.target.outputs.source_ref }}
+      release_tag: ${{ steps.target.outputs.release_tag }}
     steps:
       - name: Require the repository default branch and a trusted baseline
+        id: target
         env:
           GH_TOKEN: ${{ github.token }}
           PREVIOUS_RUN_ID: ${{ inputs.previous_candidate_run_id }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          REQUESTED_RELEASE_TAG: ${{ inputs.release_tag }}
+          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
           node - <<'NODE'
           (async () => {
@@ -47,6 +58,28 @@ jobs:
             if (!manual && !release) {
               throw new Error('只允许默认分支人工候选或正式版本标签推送。');
             }
+            const headers = { Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: 'application/vnd.github+json' };
+            const api = `${process.env.GITHUB_API_URL}/repos/${process.env.GITHUB_REPOSITORY}`;
+            const tag = process.env.REQUESTED_RELEASE_TAG || (release ? process.env.GITHUB_REF_NAME : '');
+            let source = process.env.GITHUB_SHA;
+            if (tag) {
+              if (!/^\d+\.\d+\.\d+$/.test(tag) || process.env.REQUESTED_VERSION) {
+                throw new Error('正式发行必须使用原版本标签，不能同时设置候选版本。');
+              }
+              // 修复控制流程后仍按原标签提交检查、构建和归档，不将 main 冒充正式源码。
+              const refResponse = await fetch(`${api}/git/ref/tags/${tag}`, { headers });
+              if (!refResponse.ok) throw new Error(`无法读取正式标签：HTTP ${refResponse.status}`);
+              const ref = await refResponse.json();
+              if (ref.object?.type !== 'tag') throw new Error('正式发行要求注解标签。');
+              const tagResponse = await fetch(`${api}/git/tags/${ref.object.sha}`, { headers });
+              if (!tagResponse.ok) throw new Error(`无法读取注解标签：HTTP ${tagResponse.status}`);
+              const annotated = await tagResponse.json();
+              if (annotated.object?.type !== 'commit') throw new Error('标签必须直接指向源码提交。');
+              source = annotated.object.sha;
+              const existing = await fetch(`${api}/releases/tags/${tag}`, { headers });
+              if (existing.status !== 404) throw new Error('发行已存在或状态无法确认，拒绝覆盖。');
+            }
+            require('node:fs').appendFileSync(process.env.GITHUB_OUTPUT, `source_ref=${source}\nrelease_tag=${tag}\n`);
             const id = process.env.PREVIOUS_RUN_ID;
             if (!id) return;
             if (!/^[1-9]\d*$/.test(id)) throw new Error('旧 run ID 必须是正整数。');
@@ -66,10 +99,12 @@ jobs:
   checks:
     needs: preflight
     uses: ./.github/workflows/ci.yml
+    with:
+      source_ref: ${{ needs.preflight.outputs.source_ref }}
 
   candidate:
     name: Candidate (${{ matrix.os }}, ${{ matrix.arch }})
-    needs: checks
+    needs: [preflight, checks]
     strategy:
       fail-fast: false
       matrix:
@@ -83,9 +118,11 @@ jobs:
         shell: bash
     env:
       LEXIMEET_BUILD_VERSION: ${{ inputs.version }}
+      LEXIMEET_RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ needs.preflight.outputs.source_ref }}
           submodules: recursive
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -109,6 +146,15 @@ jobs:
           python3 core-java/scripts/verify-release.py
           mkdir -p test-results/package-materials
           node scripts/verify-package-materials.cjs > test-results/package-materials/results.json
+      - name: 准备安装验收的固定 Full 增量资源
+        run: |
+          node - <<'NODE'
+          // 新 runner 不共享 checks 的缓存；只准备测试源，不改变已打包的 Core 词典。
+          (async () => {
+            const source = await require('./scripts/prepare-dictionary.cjs').prepareSource('full-text');
+            require('node:fs').appendFileSync(process.env.GITHUB_ENV, `LEXIMEET_DICTIONARY_TEST_SOURCE=${source}\n`);
+          })().catch(error => { console.error(error.message); process.exitCode = 1; });
+          NODE
       - name: Locate candidate executable
         run: |
           node - <<'NODE'
@@ -238,10 +284,16 @@ jobs:
           compression-level: 0
           retention-days: 30
       - name: 准备原样验收的正式下载附件
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-        run: node scripts/prepare-github-release.cjs
+        if: needs.preflight.outputs.release_tag != ''
+        run: |
+          node - <<'NODE'
+          require('./scripts/prepare-github-release.cjs')
+            .prepare(require('node:path').resolve('.runtime/github-release'), process.env.LEXIMEET_RELEASE_TAG)
+            .then(result => console.log(`发行附件检查通过：${result.version} ${result.commit}`))
+            .catch(error => { console.error(error.message); process.exitCode = 1; });
+          NODE
       - name: 上传正式附件供发布任务复用
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        if: needs.preflight.outputs.release_tag != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: desktop-release-files-${{ matrix.os }}-${{ matrix.arch }}
@@ -263,15 +315,18 @@ jobs:
 
   release:
     name: Publish verified release
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-    needs: candidate
+    if: needs.preflight.outputs.release_tag != ''
+    needs: [preflight, candidate]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: write
+    env:
+      LEXIMEET_RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ needs.preflight.outputs.source_ref }}
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
@@ -281,11 +336,17 @@ jobs:
           name: desktop-release-files-macos-15-arm64
           path: .runtime/github-release/
       - name: 复核标签来源与全部附件摘要
-        run: node scripts/prepare-github-release.cjs --verify .runtime/github-release
+        run: |
+          node - <<'NODE'
+          require('./scripts/prepare-github-release.cjs')
+            .verify(require('node:path').resolve('.runtime/github-release'), process.env.LEXIMEET_RELEASE_TAG)
+            .then(result => console.log(`发行附件检查通过：${result.version} ${result.commit}`))
+            .catch(error => { console.error(error.message); process.exitCode = 1; });
+          NODE
       # 草稿接收完整附件后再公开，不覆盖已有正式版本。
       - name: 发布已验收的安装包与完整对应源码
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" .runtime/github-release/* --verify-tag --draft --title "LexiMeet Desktop $GITHUB_REF_NAME" --notes-file "docs/版本/$GITHUB_REF_NAME.md"
-          gh release edit "$GITHUB_REF_NAME" --draft=false --latest
+          gh release create "$LEXIMEET_RELEASE_TAG" .runtime/github-release/* --verify-tag --draft --title "LexiMeet Desktop $LEXIMEET_RELEASE_TAG" --notes-file "docs/版本/$LEXIMEET_RELEASE_TAG.md"
+          gh release edit "$LEXIMEET_RELEASE_TAG" --draft=false --latest
