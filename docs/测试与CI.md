@@ -63,18 +63,18 @@ Windows / Linux 仍使用隐藏窗口、静音、受控输入和资源隔离，�
 
 ## 持续集成门禁
 
-| 工作流             | 范围                                                                                   |
-| ------------------ | -------------------------------------------------------------------------------------- |
-| ci.yml             | macOS arm64：格式/文档/契约、单元、Core、真实 HTTP/Host、隐藏原生 UI、七天链路、真实包 |
-| lmcp-workspace.yml | 固定 Browser 引用和 Core gitlink；生产扩展通过真实 Native Host 连接源码与打包 Desktop  |
-| visual.yml         | 手动运行当前真实原生使用链路及明暗/窄窗截图，供人工审查；不宣称像素比较通过            |
-| candidate.yml      | 手动构建候选包、哈希/许可/来源证据；可信旧包时执行真实升级，缺旧包不冒充升级           |
+| 工作流             | 范围                                                                                            |
+| ------------------ | ----------------------------------------------------------------------------------------------- |
+| ci.yml             | macOS arm64：格式/文档/契约、单元、Core、真实 HTTP/Host、隐藏原生 UI、七天链路、真实包          |
+| lmcp-workspace.yml | 固定 Browser 引用和 Core gitlink；生产扩展通过真实 Native Host 连接源码与打包 Desktop           |
+| visual.yml         | 手动运行当前真实原生使用链路及明暗/窄窗截图，供人工审查；不宣称像素比较通过                     |
+| candidate.yml      | 人工候选或正式标签：完整门禁、构建/安装验证、对应源码；标签通过后公开 Release；可信旧包另验升级 |
 
 `ci.yml` 整体作业预算为 60 分钟，给全新 runner 的依赖准备、完整 UI、七天链路和随包验证留出时间。业务请求的 15 秒预算、单例断言和零重试策略保持不变；作业预算不代表实测耗时或远端检查已经通过。
 
 Core 子模块单元测试在临时空仓中让 Git 解析相对来源，覆盖 GitHub / Gitee 的 HTTPS 与 SSH 地址；随后从本地 Core 检出固定 gitlink 并核对源码。解析检查不访问网络，也不改开发者的远端或全局配置；远端是否能取得该提交仍由实际递归检出验证。
 
-Actions 固定到完整 SHA，凭据为只读，证据包含生产物料指纹。`macos-15` 当前为 arm64，平台规格以[GitHub 官方文档](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)为准。配置校验通过不代表远程执行通过；获得推送授权后，还需实际运行远程 Actions。
+Actions 固定到完整 SHA，检查和构建任务使用只读凭据，只有正式标签的最终发布任务取得 Release 写权限；证据包含生产物料指纹。`macos-15` 当前为 arm64，平台规格以[GitHub 官方文档](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)为准。配置校验通过不代表远程执行通过；获得推送授权后，还需实际运行远程 Actions。
 
 ## 当前版本的验收记录
 
