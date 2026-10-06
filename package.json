@@ -1,0 +1,176 @@
+{
+  "name": "leximeet-desktop",
+  "version": "1.0.0",
+  "description": "词遇-LexiMeet：在语境里遇见，在记忆里重逢。",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "author": "LexiMeet contributors",
+  "main": "electron/main.js",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "node scripts/launch.cjs dev",
+    "demo": "node scripts/launch.cjs demo",
+    "lab": "node scripts/accept-connected.cjs",
+    "lab:check": "node scripts/accept-connected.cjs --check",
+    "start": "node scripts/launch.cjs local",
+    "preview": "node scripts/preview.cjs",
+    "build:frontend": "vite build --config frontend/vite.config.mjs",
+    "build:core": "node scripts/java.cjs package",
+    "build": "npm run prepare:dictionary && npm run build:frontend && npm run build:core",
+    "test:unit": "node --test --test-concurrency=2 tests/unit/*.test.cjs frontend/tests/*.test.mjs",
+    "test:core": "node scripts/java.cjs test",
+    "test:e2e": "npm run test:desktop",
+    "test:package": "npm run test:package:desktop",
+    "test": "npm run test:unit && npm run test:core",
+    "verify": "npm run verify:desktop",
+    "package:dir": "npm run build && node scripts/package.cjs dir",
+    "test:integration": "node --test --test-concurrency=1 tests/e2e/core-runtime.test.cjs",
+    "test:ui": "npm run test:desktop",
+    "test:visual": "playwright test --config playwright.desktop.config.cjs tests/desktop001/practice-usage-capture.spec.cjs",
+    "test:upgrade": "node scripts/test-desktop.cjs upgrade",
+    "test:install": "node scripts/test-install.cjs",
+    "test:report": "playwright show-report playwright-report/e2e",
+    "build:runtime": "node scripts/build-runtime.cjs",
+    "package:dist": "npm run build && node scripts/package.cjs dist",
+    "test:install:upgrade": "node scripts/test-desktop.cjs install-upgrade",
+    "install:electron": "node scripts/install-electron.cjs",
+    "benchmark:startup": "node scripts/benchmark-startup.cjs",
+    "build:native-host": "node scripts/lmcp/build-host.cjs",
+    "register:native-host": "node scripts/register-native-host.cjs",
+    "test:connector": "npm run test:lmcp:transport",
+    "test:lmcp:contract": "npm run verify:lmcp:contract",
+    "test:lmcp:manual": "node scripts/accept-connected.cjs",
+    "prune:artifacts": "node scripts/prune-artifacts.cjs --release",
+    "accept:desktop": "node scripts/accept-desktop.cjs",
+    "prepare:dictionary": "node scripts/prepare-dictionary.cjs",
+    "build:desktop": "npm run build",
+    "verify:desktop": "node scripts/verify-desktop.cjs",
+    "test:background": "bash scripts/test-background.sh",
+    "test:journey": "node scripts/test-daily-journey.cjs",
+    "test:desktop": "playwright test --config playwright.desktop.config.cjs",
+    "test:package:desktop": "playwright test --config playwright.desktop-package.config.cjs",
+    "test:lmcp:transport": "node --test --test-concurrency=1 tests/lmcp/transport-*.test.cjs",
+    "verify:lmcp:contract": "node scripts/lmcp/verify-contract.cjs",
+    "accept:connected": "node scripts/accept-connected.cjs",
+    "test:connected": "node tests/connected/run-browser.cjs",
+    "test:lmcp:e2e": "npm run test:connected",
+    "test:connected:package": "node node_modules/@playwright/test/cli.js test --config tests/connected/playwright.config.cjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "docs:check": "node scripts/check-docs.cjs",
+    "release:local": "node scripts/release-local.cjs"
+  },
+  "dependencies": {
+    "canvas-confetti": "1.9.4",
+    "ee-core": "5.0.1",
+    "https-proxy-agent": "7.0.6",
+    "ws": "8.22.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@vitejs/plugin-vue": "6.0.9",
+    "electron": "44.3.0",
+    "electron-builder": "26.15.3",
+    "playwright": "1.63.0",
+    "prettier": "3.6.2",
+    "vite": "8.3.0",
+    "vue": "3.5.42"
+  },
+  "build": {
+    "appId": "org.leximeet.desktop",
+    "productName": "LexiMeet",
+    "asar": true,
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "frontend/dist/**/*",
+      "resources/**/*",
+      "!resources/dictionary/**/*",
+      "package.json",
+      "LICENSE",
+      "frontend/src/assets/audio/NOTICE.md"
+    ],
+    "extraResources": [
+      {
+        "from": "node_modules/electron/dist/LICENSE",
+        "to": "electron-licenses/LICENSE"
+      },
+      {
+        "from": "node_modules/electron/dist/LICENSES.chromium.html",
+        "to": "electron-licenses/LICENSES.chromium.html"
+      },
+      {
+        "from": "core-java/target/leximeet-core.jar",
+        "to": "core/leximeet-core.jar"
+      },
+      {
+        "from": ".runtime/jre",
+        "to": "runtime"
+      },
+      {
+        "from": "resources/dictionary",
+        "to": "dictionary",
+        "filter": [
+          "core-text.sqlite",
+          "core-text.sqlite.json",
+          "release.json",
+          "DATA-LICENSE.md",
+          "LICENSE",
+          "catalogs.json",
+          "entries-core-delta.jsonl.zst",
+          "entries-lite.jsonl.zst",
+          "learning-sources.lock.json",
+          "notice-CMUDICT-LICENSE.txt",
+          "notice-DICTIONARYBYGPT4-LICENSE.md",
+          "notice-ECDICT-LICENSE.txt",
+          "notice-ESPEAK-NG-AND-OPUS.md",
+          "notice-OPEN-DICTIONARY-DATA-LICENSE.md",
+          "notice-OPEN-ENGLISH-WORDNET-LICENSE.md",
+          "notice-PRINCETON-WORDNET-LICENSE.txt",
+          "notice-QWERTY-LEARNER-LICENSE.md",
+          "package-sources.lock.json",
+          "selection.json"
+        ]
+      },
+      {
+        "from": ".runtime/lmcp-host",
+        "to": "native-host"
+      }
+    ],
+    "mac": {
+      "icon": "resources/brand/LexiMeet.icns",
+      "category": "public.app-category.education",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "identity": "-",
+      "extendInfo": {
+        "NSUserNotificationAlertStyle": "alert"
+      }
+    },
+    "win": {
+      "icon": "resources/brand/LexiMeet.ico",
+      "target": "nsis"
+    },
+    "linux": {
+      "icon": "resources/brand/icon-512x512.png",
+      "target": "AppImage",
+      "category": "Education",
+      "executableName": "leximeet"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "runAfterFinish": false,
+      "deleteAppDataOnUninstall": false
+    },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+  }
+}

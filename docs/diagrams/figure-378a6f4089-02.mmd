@@ -1,0 +1,10 @@
+sequenceDiagram
+  participant B as Browser 后台
+  participant H as Native Host
+  participant M as Electron Main
+  participant C as Java Core
+  B->>H: nativeMessaging 消息
+  H->>M: 同用户的本机 UDS
+  M->>C: 私有 HTTP / 固定方法
+  C->>C: 校验会话、owner、scope
+  C-->>B: 只读资料或持久操作回执

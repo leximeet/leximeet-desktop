@@ -1,0 +1,5 @@
+{
+  "name": "@leximeet/renderer",
+  "private": true,
+  "type": "module"
+}

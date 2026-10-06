@@ -1,0 +1,61 @@
+:root {
+  color-scheme: light;
+  --surface: #fff;
+  --sidebar: #f5f7f4;
+  --subtle: #fafbf9;
+  --hover: #f0f3ef;
+  --line: #e6eae5;
+  --line-strong: #d3dbd4;
+  --text: #24302b;
+  --muted: #5f7065;
+  --soft: #63756a;
+  --accent: #19735f;
+  --accent-strong: #125a4a;
+  --accent-soft: #e9f3ed;
+  --context: #f3f7f1;
+  --mark: #d6eadd;
+  --amber: #996c34;
+  --amber-bg: #f7f0e4;
+  --danger: #aa5149;
+  --danger-bg: #fbefed;
+  --blue: #5b7890;
+  --primary-text: #fff;
+  --reading-font: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --body-font: "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --tone-due: #825817;
+  --tone-due-bg: #f8efdd;
+  --tone-learning: #17705b;
+  --tone-learning-bg: #e4f1eb;
+  --tone-familiar: #526658;
+  --tone-familiar-bg: #eff2ef;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #17201e;
+  --sidebar: #0e1717;
+  --subtle: #141d1b;
+  --hover: #202c27;
+  --line: #2a3630;
+  --line-strong: #3b4b41;
+  --text: #e0e8e1;
+  --muted: #a0b0a5;
+  --soft: #82978a;
+  --accent: #80c7ac;
+  --accent-strong: #98d9c0;
+  --accent-soft: #223b31;
+  --context: #1d2c24;
+  --mark: #355d46;
+  --amber: #d7b582;
+  --amber-bg: #342c22;
+  --danger: #e7a49a;
+  --danger-bg: #382824;
+  --blue: #a3c3d8;
+  --primary-text: #10271c;
+  --tone-due: #e2b472;
+  --tone-due-bg: #3a2f1d;
+  --tone-learning: #86cfb2;
+  --tone-learning-bg: #1d3b30;
+  --tone-familiar: #9db3a5;
+  --tone-familiar-bg: #232f29;
+}

@@ -1,0 +1,98 @@
+name: LMCP reading capture integration (manual)
+
+on:
+  workflow_call:
+    inputs:
+      desktop_repository:
+        type: string
+        default: leximeet/leximeet-desktop
+      desktop_ref:
+        type: string
+        default: main
+      browser_repository:
+        type: string
+        default: leximeet/leximeet-browser
+      browser_ref:
+        type: string
+        default: main
+  workflow_dispatch:
+    inputs:
+      browser_ref:
+        description: Browser 分支或提交，结果记录实际 SHA
+        default: main
+
+permissions:
+  contents: read
+concurrency:
+  group: lmcp-connected-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  CSC_IDENTITY_AUTO_DISCOVERY: "false"
+  ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+jobs:
+  connected:
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+        working-directory: leximeet-desktop
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: ${{ inputs.desktop_repository || github.repository }}
+          ref: ${{ inputs.desktop_ref || github.sha }}
+          path: leximeet-desktop
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: ${{ inputs.browser_repository || 'leximeet/leximeet-browser' }}
+          ref: ${{ inputs.browser_ref || 'main' }}
+          path: plugin/leximeet-browser
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: leximeet-desktop/.nvmrc
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+      # 协议只消费随仓快照；不用相邻协议 main 覆盖候选身份。
+      - name: Build and verify current Desktop
+        run: bash scripts/test-background.sh
+      - name: Verify actual Core Jar, SBOM and original license bytes
+        run: python3 core-java/scripts/verify-release.py
+      - name: Build original Browser production extension
+        working-directory: plugin/leximeet-browser
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+          npm run verify:manifest
+          npx playwright install chromium
+      - name: Real production Browser and source Desktop
+        run: npm run test:connected
+      - name: Build and verify bundled JRE and external Native Host
+        run: |
+          LEXIMEET_ACCEPTANCE_APP=1 LEXIMEET_BUILD_OUTPUT=.runtime/connected-ci-package node scripts/package.cjs dir
+          mkdir -p test-results/package-materials
+          node scripts/verify-package-materials.cjs .runtime/connected-ci-package > test-results/package-materials/results.json
+          LEXIMEET_CONNECTED_PACKAGE_ROOT="$PWD/.runtime/connected-ci-package" npm run test:connected:package
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: lmcp-connected-macos
+          path: |
+            leximeet-desktop/test-results/connected-real-browser/
+            leximeet-desktop/test-results/connected-package/
+            leximeet-desktop/core-java/target/surefire-reports/
+            leximeet-desktop/core-java/target/release-verification.json
+            leximeet-desktop/test-results/package-materials/
+          if-no-files-found: warn
+          retention-days: 14

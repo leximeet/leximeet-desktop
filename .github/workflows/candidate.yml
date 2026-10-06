@@ -1,0 +1,246 @@
+name: Desktop candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "可选：候选版本，如 1.0.1-rc.1；不修改源码 package.json"
+        type: string
+        required: false
+        default: ""
+      previous_candidate_run_id:
+        description: "可选：同仓已成功的旧 Desktop candidate run ID；版本必须低于本次版本"
+        type: string
+        required: false
+        default: ""
+
+# 仅交付测试候选文件；没有创建 Release、推送代码或访问签名密钥的权限。
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: desktop-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CI: "true"
+  CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+jobs:
+  preflight:
+    runs-on: macos-15
+    timeout-minutes: 5
+    steps:
+      - name: Require the repository default branch and a trusted baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_RUN_ID: ${{ inputs.previous_candidate_run_id }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          node - <<'NODE'
+          (async () => {
+            if (process.env.GITHUB_REF !== `refs/heads/${process.env.DEFAULT_BRANCH}`) {
+              throw new Error('候选交付只允许从仓库默认分支人工触发。');
+            }
+            const id = process.env.PREVIOUS_RUN_ID;
+            if (!id) return;
+            if (!/^[1-9]\d*$/.test(id)) throw new Error('旧 run ID 必须是正整数。');
+            const response = await fetch(`${process.env.GITHUB_API_URL}/repos/${process.env.GITHUB_REPOSITORY}/actions/runs/${id}`, {
+              headers: { Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: 'application/vnd.github+json' }
+            });
+            if (!response.ok) throw new Error(`无法读取旧候选：HTTP ${response.status}`);
+            const run = await response.json();
+            if (run.path !== '.github/workflows/candidate.yml' || run.event !== 'workflow_dispatch' ||
+                run.conclusion !== 'success' || run.head_branch !== process.env.DEFAULT_BRANCH ||
+                run.head_repository?.full_name !== process.env.GITHUB_REPOSITORY) {
+              throw new Error('旧候选必须来自同仓默认分支上成功完成的 Desktop candidate 人工流水线。');
+            }
+          })().catch(error => { console.error(error.message); process.exitCode = 1; });
+          NODE
+
+  checks:
+    needs: preflight
+    uses: ./.github/workflows/ci.yml
+
+  candidate:
+    name: Candidate (${{ matrix.os }}, ${{ matrix.arch }})
+    needs: checks
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      LEXIMEET_BUILD_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+      - run: npm ci
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+      - name: Build candidate installers with bundled Java
+        run: npm run package:dist
+      - name: Verify candidate Core and actual packaged materials
+        run: |
+          python3 core-java/scripts/verify-release.py
+          mkdir -p test-results/package-materials
+          node scripts/verify-package-materials.cjs > test-results/package-materials/results.json
+      - name: Locate candidate executable
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const { execFileSync } = require('node:child_process');
+          const executable = execFileSync(process.execPath, ['scripts/artifacts.cjs', 'find-executable'], { encoding: 'utf8' }).trim();
+          fs.appendFileSync(process.env.GITHUB_ENV, `LEXIMEET_PACKAGED_EXECUTABLE=${executable}\n`);
+          NODE
+      - name: Verify macOS installer and installed application
+        run: |
+          if npm run test:install; then
+            node scripts/record-package-check.cjs install passed
+          else
+            node scripts/record-package-check.cjs install failed
+            exit 1
+          fi
+      - name: Download previous trusted candidate
+        if: inputs.previous_candidate_run_id != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: candidate-${{ matrix.os }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/previous-candidate-download
+          run-id: ${{ inputs.previous_candidate_run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify and extract the previous candidate
+        if: inputs.previous_candidate_run_id != ''
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const crypto = require('node:crypto');
+          const { execFileSync } = require('node:child_process');
+          const downloaded = path.join(process.env.RUNNER_TEMP, 'previous-candidate-download');
+          const destination = path.join(process.env.RUNNER_TEMP, 'previous-candidate-app');
+          const archive = path.join(downloaded, 'candidate.tar.gz');
+          const metadata = JSON.parse(fs.readFileSync(path.join(downloaded, 'metadata.json'), 'utf8'));
+          if (metadata.platform !== process.platform || metadata.arch !== process.arch) throw new Error('旧候选平台或架构不匹配。');
+          const expected = fs.readFileSync(path.join(downloaded, 'SHA256SUMS'), 'utf8').trim();
+          const actual = crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex');
+          if (expected !== `${actual}  candidate.tar.gz`) throw new Error('旧候选归档 SHA256 不匹配。');
+          const entries = execFileSync('tar', ['-tzf', archive], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }).trim().split('\n');
+          if (entries.some(entry => path.posix.isAbsolute(entry) || entry.split('/').includes('..'))) throw new Error('归档包含越界路径。');
+          fs.mkdirSync(destination, { recursive: true });
+          execFileSync('tar', ['-xzf', archive, '-C', destination], { stdio: 'inherit' });
+          const executable = execFileSync(process.execPath, ['scripts/artifacts.cjs', 'find-executable', destination], { encoding: 'utf8' }).trim();
+          fs.appendFileSync(process.env.GITHUB_ENV, `LEXIMEET_UPGRADE_FROM=${executable}\n`);
+          const previousInstaller = execFileSync(process.execPath, ['scripts/artifacts.cjs', 'find-installer', destination], { encoding: 'utf8' }).trim();
+          const installer = execFileSync(process.execPath, ['scripts/artifacts.cjs', 'find-installer'], { encoding: 'utf8' }).trim();
+          fs.appendFileSync(process.env.GITHUB_ENV, `LEXIMEET_PREVIOUS_INSTALLER=${previousInstaller}\nLEXIMEET_INSTALLER=${installer}\n`);
+          NODE
+      - name: Verify macOS upgrade and persisted profile
+        if: inputs.previous_candidate_run_id != ''
+        run: npm run test:upgrade
+      - name: Verify macOS installation replacement and profile migration
+        if: inputs.previous_candidate_run_id != ''
+        run: |
+          if npm run test:install:upgrade; then
+            node scripts/record-package-check.cjs upgrade passed
+          else
+            node scripts/record-package-check.cjs upgrade failed
+            exit 1
+          fi
+      - name: Generate checksums for each distribution file
+        run: node scripts/artifacts.cjs checksums
+      - name: Archive candidate, preserving executable permissions
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const crypto = require('node:crypto');
+          const path = require('node:path');
+          const { execFileSync } = require('node:child_process');
+          fs.mkdirSync('candidate-output', { recursive: true });
+          // 独立 tar 保留 .app 的符号链接和 Unix 执行权限，外层 artifact 只传送普通文件。
+          const { resolvePackageOutput } = require('./scripts/lib/package-output.cjs');
+          execFileSync('tar', ['-czf', 'candidate-output/candidate.tar.gz', '-C', resolvePackageOutput(process.cwd()), '.'], { stdio: 'inherit' });
+          const digest = crypto.createHash('sha256').update(fs.readFileSync('candidate-output/candidate.tar.gz')).digest('hex');
+          fs.writeFileSync('candidate-output/SHA256SUMS', `${digest}  candidate.tar.gz\n`);
+          // git archive 不展开子模块，分别交付应用（含 Host）和实际 gitlink Core 的完整源码。
+          // 保持旧二进制校验文件格式，源码使用独立清单，避免破坏旧候选升级读取。
+          const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
+          const desktopCommit = git('rev-parse', 'HEAD');
+          const coreCommit = git('rev-parse', 'HEAD:core-java');
+          if (git('-C', 'core-java', 'rev-parse', 'HEAD') !== coreCommit) throw new Error('Core 不符合应用固定的 gitlink，拒绝归档源码。');
+          execFileSync('git', ['diff', '--quiet', 'HEAD']);
+          execFileSync('git', ['-C', 'core-java', 'diff', '--quiet', 'HEAD']);
+          const sources = [
+            { repository: 'leximeet-desktop', commit: desktopCommit, directory: '.', file: 'desktop-source.tar.gz' },
+            { repository: 'leximeet-desktop-core', commit: coreCommit, directory: 'core-java', file: 'core-source.tar.gz' }
+          ].map(({ directory, ...source }) => {
+            const archive = path.resolve('candidate-output', source.file);
+            execFileSync('git', ['-C', directory, 'archive', '--format=tar.gz', `--prefix=${source.repository}/`, `--output=${archive}`, source.commit]);
+            return { ...source, sha256: crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex') };
+          });
+          fs.writeFileSync('candidate-output/SOURCE_SHA256SUMS', sources.map(source => `${source.sha256}  ${source.file}\n`).join(''));
+          const contract = require('./resources/lmcp/contract.json');
+          const sourceMetadata = {
+            version: process.env.LEXIMEET_BUILD_VERSION || require('./package.json').version,
+            protocol: { version: contract.apiVersion, digest: contract.contractDigest },
+            sources,
+            build: '解压 Desktop，将解压的 Core 内容放入 Desktop/core-java；按 docs/开发指南.md 使用 npm ci、JDK 21 与固定资源构建。'
+          };
+          fs.writeFileSync('candidate-output/SOURCE_METADATA.json', `${JSON.stringify(sourceMetadata, null, 2)}\n`);
+          const javaRelease = fs.readFileSync(path.join(process.env.JAVA_HOME, 'release'), 'utf8');
+          const javaValue = key => new RegExp(`^${key}="([^"\\r\\n]+)"$`, 'm').exec(javaRelease)?.[1];
+          const javaBuild = { version: javaValue('JAVA_VERSION'), implementor: javaValue('IMPLEMENTOR'), implementorVersion: javaValue('IMPLEMENTOR_VERSION') || null };
+          if (!javaBuild.version || !javaBuild.implementor) throw new Error('缺少实际 JDK 补丁版本或供应商，拒绝生成来源不完整的候选。');
+          const metadata = {
+            version: process.env.LEXIMEET_BUILD_VERSION || require('./package.json').version,
+            platform: process.platform,
+            arch: process.arch,
+            commit: desktopCommit,
+            sources,
+            javaBuild,
+            runId: process.env.GITHUB_RUN_ID,
+            signed: false,
+            upgradeVerified: Boolean(process.env.LEXIMEET_UPGRADE_FROM)
+          };
+          fs.writeFileSync('candidate-output/metadata.json', `${JSON.stringify(metadata, null, 2)}\n`);
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `候选包：${metadata.platform}/${metadata.arch} ${metadata.version}。安装载荷检查已完成；跨版本资料保留检查${metadata.upgradeVerified ? '已完成' : '未运行（没有提供旧 candidate run ID）'}。文件未签名，没有发布到 GitHub Release。\n`);
+          NODE
+      - name: Upload tested candidate files
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: candidate-${{ matrix.os }}-${{ matrix.arch }}
+          path: candidate-output/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+      - name: Upload installation and upgrade diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: candidate-diagnostics-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            test-results/
+            playwright-report/
+            release/**/builder-debug.yml
+          if-no-files-found: warn
+          retention-days: 14

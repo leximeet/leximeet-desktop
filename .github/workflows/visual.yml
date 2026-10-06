@@ -1,0 +1,55 @@
+name: Desktop native screenshots
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CI: "true"
+  ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+jobs:
+  visual:
+    name: Native light, dark and narrow review
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+      - name: Prepare current application and isolated environment
+        run: node -e "require('./scripts/accept-desktop.cjs').prepare().catch(error => { console.error(error.message); process.exitCode = 1; })"
+      - name: Exercise real application and capture review images
+        run: npm run test:visual
+      - name: Explain evidence boundary
+        if: success()
+        run: |
+          node - <<'NODE'
+          require('node:fs').appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            '当前真实 Electron/Core 用例验证使用链路、幽灵文字与窗口布局，并输出明亮、黑暗和窄窗截图供人工审查。这不是像素基线比较，不能代替完整原生 UI 或跨端验收。\n');
+          NODE
+      - name: Upload native screenshots and test evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: native-screenshots-macos-arm64
+          path: |
+            test-results/practice-usage/
+            test-results/desktop-001/
+            playwright-report/desktop-001/
+          if-no-files-found: error
+          retention-days: 14

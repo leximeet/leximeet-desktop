@@ -1,0 +1,10 @@
+flowchart LR
+  Renderer[Vue 桌面页面] --> Preload[命名 preload 方法]
+  Preload --> Main[Electron Main]
+  Browser[连接插件] --> Host[随包 Native Host]
+  Host --> Gateway[Main 连接网关]
+  Gateway --> Core[独立 Java Core]
+  Main --> Core
+  Core --> DB[(个人 SQLite)]
+  Core --> Dictionary[(只读公共词典)]
+  Main --> OS[通知 剪贴板 窗口 发音]

@@ -1,0 +1,58 @@
+.capture-window-shell {
+  height: 100vh;
+  min-width: 0;
+}
+.capture-window-title {
+  -webkit-app-region: drag;
+  height: 54px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 18px 24px 12px 94px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.capture-window-body {
+  padding: 26px;
+  overflow: auto;
+  flex: 1;
+}
+.capture-window-body h1 {
+  font-size: 22px;
+  margin: 0 0 26px;
+}
+.capture-editor {
+  display: grid;
+  gap: 20px;
+}
+.capture-editor label {
+  display: grid;
+  gap: 8px;
+}
+.capture-editor textarea {
+  min-height: 108px;
+  resize: vertical;
+}
+.capture-editor details label {
+  margin-top: 14px;
+}
+.capture-editor footer {
+  padding-top: 8px;
+}
+.capture-notification {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  margin: 14px 0;
+}
+.capture-notification h2 {
+  font:
+    25px Georgia,
+    serif;
+}
+.capture-context {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+  max-height: 60px;
+  overflow: auto;
+}

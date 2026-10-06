@@ -1,0 +1,11 @@
+flowchart LR
+  Start[首次启动] --> Guide[进入或跳过教学]
+  Guide --> Plan[可选学习规划]
+  Guide --> Capture[直接记录遇见]
+  Plan --> Today[今日任务]
+  Capture --> Library[我的词库和遇见记录]
+  Today --> Practice[六种练习]
+  Library --> Practice
+  Practice --> State[积分 阶段 复习到期]
+  State --> Reminder[系统通知快速练习]
+  Reminder --> Practice

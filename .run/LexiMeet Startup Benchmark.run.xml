@@ -1,0 +1,7 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="LexiMeet 启动基准" type="js.build_tools.npm">
+    <package-json value="$PROJECT_DIR$/package.json" />
+    <command value="run" /><scripts><script value="benchmark:startup" /></scripts>
+    <node-interpreter value="project" /><envs /><method v="2" />
+  </configuration>
+</component>

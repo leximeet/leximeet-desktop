@@ -1,0 +1,12 @@
+flowchart LR
+  U[桌面 Vue 页面] --> P[命名 preload 用例]
+  P --> M[Electron Main]
+  B[插件 ReadingPort / CapturePort] --> H[随包 Native Host]
+  H -->|同用户 UDS（当前 macOS）| M
+  M -->|回环私有 HTTP| C[Java Core]
+  C --> L[内部学习 / 规划 / 冻结练习]
+  C --> R[LMCP 阅读 / 采集 / 授权]
+  L --> S[(个人 SQLite)]
+  R --> S
+  C --> D[(只读 Dictionary)]
+  M --> N[剪贴板 / 系统通知 / 发音 / 窗口]

@@ -1,0 +1,6 @@
+flowchart LR
+  P[网页插件] --> H[Native Host]
+  H --> M[Desktop Main]
+  R[受控 Renderer] --> M
+  M --> C[私有 Core]
+  C --> S[(本机 SQLite)]

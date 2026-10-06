@@ -1,0 +1,9 @@
+sequenceDiagram
+  participant U as 普通页面 / 通知题目
+  participant C as Core 内部练习服务
+  participant D as SQLite
+  U->>C: 冻结队列、题目、选项、辅助状态
+  U->>C: 稳定 attemptId / submissionId + 实际 input
+  C->>C: 验证归属、首反馈和题目，可信判题
+  C->>D: 练习事件、阶段/FSRS、回执，同一事务
+  D-->>U: 原回执和有效反馈

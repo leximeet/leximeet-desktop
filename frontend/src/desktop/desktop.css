@@ -1,0 +1,12 @@
+/* 正式桌面端唯一的样式入口。基础规则先于页面规则，每个组件只在自己的命名空间内布局。 */
+@import "./styles/tokens.css";
+@import "./styles/base.css";
+@import "./styles/shell.css";
+@import "./styles/library.css";
+@import "./styles/pages.css";
+@import "./styles/planning.css";
+@import "./styles/practice.css";
+@import "./styles/settings.css";
+@import "./styles/card-layout.css";
+@import "./styles/capture.css";
+@import "./styles/guide.css";

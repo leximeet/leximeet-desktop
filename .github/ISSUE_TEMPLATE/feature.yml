@@ -1,0 +1,10 @@
+name: 功能建议
+description: 说明使用场景与希望改善的体验
+body:
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 当前场景与期望
+      description: 说明涉及独立/连接模式、资料归属和可能的验证方法
+    validations:
+      required: true

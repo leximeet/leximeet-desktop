@@ -1,0 +1,122 @@
+.card-level-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.card-level-choice {
+  min-width: 0;
+  min-height: 112px;
+  text-align: left;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  background: var(--subtle);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+}
+.card-level-choice:hover {
+  background: var(--hover);
+}
+.card-level-choice.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.card-level-choice strong {
+  font-size: 15px;
+}
+.card-level-choice small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.card-level-choice span {
+  margin-top: auto;
+  color: var(--accent);
+  font-size: 10px;
+}
+.card-layout-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  padding: 21px 0 8px;
+}
+.card-layout-summary p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.card-layout-editor {
+  border: 1px solid var(--line);
+  background: var(--subtle);
+  border-radius: 11px;
+  padding: 18px;
+  margin-top: 17px;
+}
+.card-layout-editor > p {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 0 0 12px;
+}
+.card-layout-editor ol {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.card-layout-editor li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+}
+.card-layout-editor li label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  min-width: 0;
+}
+.card-layout-editor li label span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.card-layout-editor li label strong {
+  font-size: 12px;
+}
+.card-layout-editor li label small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.card-layout-order {
+  display: flex;
+  gap: 5px;
+}
+.card-layout-order button {
+  min-width: 30px;
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.card-layout-order button:not(:disabled):hover {
+  background: var(--hover);
+}
+.card-layout-actions {
+  margin-top: 18px;
+}
+@media (max-width: 900px) {
+  .card-level-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 900px) {
+  .card-layout-summary {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

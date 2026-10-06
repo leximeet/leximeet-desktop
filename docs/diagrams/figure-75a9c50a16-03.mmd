@@ -1,0 +1,13 @@
+flowchart TD
+  Ready[完整冻结题就绪] --> Input[用户选择或输入]
+  Input --> Save[保存原提交身份]
+  Save --> Core[Core 判题并提交事实]
+  Core --> Confirm[校验回执并保存确认草稿]
+  Confirm -- 成功且正确 --> Feedback[稳定反馈一秒]
+  Feedback --> Prepare[准备下一题全部依赖]
+  Prepare --> Ready
+  Confirm -- 错误答案 --> Input
+  Save -- 失败 --> Recover[原题与原身份重试]
+  Core -- 未知回执 --> Recover
+  Confirm -- 草稿失败 --> Recover
+  Recover --> Save

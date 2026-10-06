@@ -1,0 +1,80 @@
+name: Desktop local workflow
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  CSC_IDENTITY_AUTO_DISCOVERY: "false"
+  ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+jobs:
+  desktop:
+    name: Desktop units, Core, real process and native UI
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+      - name: Check the acceptance architecture
+        run: node -e "if(process.arch !== 'arm64') throw new Error('1.0.0 CI 要求 macOS arm64 runner')"
+      # 同一个入口准备依赖、固定公共资源和当前构建；不需要 Chromium 插件或云服务。
+      - name: Run the isolated desktop gate
+        run: bash scripts/test-desktop.sh --verify
+      - name: Verify actual Core Jar, SBOM and original license bytes
+        run: python3 core-java/scripts/verify-release.py
+      - name: Verify formatting and public documents
+        run: |
+          npm run format:check
+          npm run docs:check
+          npm audit --omit=dev --audit-level=high
+      - name: Verify first install and seven-day usage
+        run: bash scripts/test-desktop.sh --journey --prepared
+      - name: Build the current unsigned application
+        run: node scripts/package.cjs dir
+      - name: Verify actual packaged licenses, contract and source bytes
+        run: |
+          mkdir -p test-results/package-materials
+          node scripts/verify-package-materials.cjs > test-results/package-materials/results.json
+      - name: Verify bundled Java and actual application
+        run: npm run test:package:desktop
+      - name: Upload local workflow evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-local-workflow
+          path: |
+            test-results/desktop-001/
+            playwright-report/desktop-001/
+            playwright-report/desktop-001-package/
+            core-java/target/surefire-reports/
+            core-java/target/release-verification.json
+            test-results/package-materials/
+            test-results/daily-journey/
+            playwright-report/daily-journey/
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,0 +1,220 @@
+.d-settings-layout {
+  display: grid;
+  grid-template-columns: 155px minmax(0, 1fr);
+  gap: 32px;
+}
+.d-settings-navigation {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-self: start;
+  position: sticky;
+  top: 24px;
+}
+.d-settings-navigation button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 13px;
+}
+.d-settings-navigation button.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+.d-settings-navigation button:hover {
+  background: var(--hover);
+}
+.d-settings-navigation .icon {
+  width: 16px;
+  height: 16px;
+}
+.d-settings-content {
+  min-width: 0;
+  max-width: 850px;
+}
+.settings-section {
+  padding-bottom: 28px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--line);
+}
+.settings-section h2 {
+  font-size: 17px;
+  margin-bottom: 16px;
+}
+.settings-section p {
+  font-size: 13px;
+  margin: 12px 0;
+  color: var(--muted);
+}
+.settings-section > .row {
+  margin-top: 16px;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  margin: 20px 0;
+}
+.form-grid select {
+  width: 100%;
+}
+.form-grid .inline-check {
+  align-self: end;
+  min-height: 34px;
+}
+.settings-section form > label {
+  margin: 16px 0;
+}
+.settings-section form > .button {
+  margin: 10px 0 12px;
+}
+.settings-section > .inline-check {
+  margin-top: 26px;
+}
+.settings-section .clipboard-policy {
+  margin-top: 20px;
+}
+.setting-option {
+  margin-top: 24px;
+}
+.setting-option + .setting-option {
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.setting-option > .muted {
+  font-size: 12px;
+  max-width: 570px;
+}
+.shortcut-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.shortcut-option > p {
+  margin: 0;
+}
+.data-location {
+  margin-top: 22px;
+  font-size: 12px;
+}
+.data-location summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.teaching-progress {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin: 22px 0;
+}
+.teaching-progress strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.teaching-progress progress {
+  accent-color: var(--accent);
+  height: 5px;
+}
+.teaching-checklist {
+  list-style: none;
+  padding: 20px 0;
+  margin: 20px 0 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  border-top: 1px solid var(--line);
+}
+.teaching-checklist li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.teaching-checklist li.done {
+  color: var(--accent);
+}
+.teaching-checklist .icon {
+  width: 16px;
+  height: 16px;
+}
+@media (max-width: 1000px) {
+  .d-settings-layout {
+    grid-template-columns: 140px minmax(0, 1fr);
+    gap: 24px;
+  }
+}
+@media (max-width: 860px) {
+  .d-settings-layout {
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+  .d-settings-navigation {
+    flex-direction: row;
+    flex-wrap: wrap;
+    position: static;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 14px;
+  }
+  .d-settings-navigation button {
+    padding: 7px 10px;
+    font-size: 12px;
+  }
+}
+
+.capture-notice-mode {
+  margin: 16px 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 18px;
+  font-size: 13px;
+}
+.capture-notice-mode select {
+  width: 140px;
+}
+
+/* 随机频率只展示规则；通知模式留在设置页，不挤占学习规划。 */
+.reminder-cadence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 18px;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.reminder-mode-options {
+  border: 0;
+  padding: 20px 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px 12px;
+}
+.reminder-mode-options legend {
+  font-weight: 600;
+  padding-top: 24px;
+}
+.reminder-mode-options legend small {
+  font-weight: 400;
+  margin-left: 8px;
+  color: var(--muted);
+}
+.reminder-mode-options label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+@media (max-width: 700px) {
+  .reminder-mode-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

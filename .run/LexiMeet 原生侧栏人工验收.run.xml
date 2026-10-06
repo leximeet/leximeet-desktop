@@ -1,0 +1,7 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="LexiMeet 原生侧栏人工验收" type="js.build_tools.npm">
+    <package-json value="$PROJECT_DIR$/package.json" />
+    <command value="run" /><scripts><script value="test:lmcp:manual" /></scripts>
+    <node-interpreter value="project" /><envs /><method v="2" />
+  </configuration>
+</component>

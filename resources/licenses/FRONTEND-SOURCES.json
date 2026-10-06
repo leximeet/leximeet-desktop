@@ -1,0 +1,35 @@
+{
+  "format": "leximeet.frontend-source-notices/1",
+  "description": "Vue runtime编译进入正式前端；即使在devDependencies中也保留完整通知。",
+  "resources": [
+    {
+      "name": "Vue runtime",
+      "repository": "https://github.com/vuejs/core",
+      "license": "MIT",
+      "licenseFile": "Vue-MIT.txt",
+      "licenseSha256": "1bb85cc9b13b81ef41c81c51866172fc345e0503c86726a6755b796590b70175",
+      "packages": [
+        {
+          "name": "vue",
+          "version": "3.5.42"
+        },
+        {
+          "name": "@vue/runtime-dom",
+          "version": "3.5.42"
+        },
+        {
+          "name": "@vue/runtime-core",
+          "version": "3.5.42"
+        },
+        {
+          "name": "@vue/reactivity",
+          "version": "3.5.42"
+        },
+        {
+          "name": "@vue/shared",
+          "version": "3.5.42"
+        }
+      ]
+    }
+  ]
+}

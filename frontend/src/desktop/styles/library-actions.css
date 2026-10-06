@@ -1,0 +1,66 @@
+/* 词库新增控件独立排版，避免把批量操作和筛选塞进词卡阅读区。 */
+.library-query-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  flex: none;
+  gap: 12px 20px;
+  padding: 12px 28px;
+  border-bottom: 1px solid var(--line);
+}
+.library-query-filters,
+.library-bulk-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.library-query-filters select {
+  min-height: 30px;
+  padding: 4px 24px 4px 8px;
+  background: var(--surface);
+}
+.library-bulk-actions > span {
+  min-width: 60px;
+  font-size: 12px;
+}
+.library-bulk-actions .text-button {
+  font-size: 12px;
+}
+.library-table .col-select {
+  width: 42px;
+}
+.library-table th.selection-column,
+.library-table td.selection-column {
+  padding: 8px;
+  text-align: center;
+}
+.library-table .selection-column input {
+  vertical-align: middle;
+}
+.library-book-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 8px 0;
+  border: 0;
+  max-height: 300px;
+  overflow: auto;
+}
+.library-book-picker label {
+  overflow-wrap: anywhere;
+}
+.word-personal-actions {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+@media (max-width: 1000px) {
+  .library-query-controls {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+  .library-bulk-actions {
+    width: 100%;
+  }
+}

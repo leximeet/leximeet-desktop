@@ -1,0 +1,19 @@
+node_modules/
+core-java/
+native-host/target/
+frontend/dist/
+.runtime/
+release/
+test-results/
+playwright-report/
+blob-report/
+candidate-output/
+resources/dictionary/
+resources/lmcp/
+tests/fixtures/
+package-lock.json
+**/*.svg
+**/*.min.js
+
+# 图表为带哈希的生成物，不能二次格式化。
+docs/diagrams/rendered/

@@ -1,0 +1,14 @@
+node_modules/
+frontend/dist/
+core-java/target/
+native-host/target/
+release/
+.runtime/
+.idea/
+test-results/
+playwright-report/
+blob-report/
+candidate-output/
+*.log
+.DS_Store
+resources/dictionary/

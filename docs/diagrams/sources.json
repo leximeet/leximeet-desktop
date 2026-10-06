@@ -1,0 +1,158 @@
+{
+  "format": 1,
+  "diagrams": [
+    {
+      "id": "figure-b335630551-01",
+      "page": "README.md",
+      "source": "docs/diagrams/figure-b335630551-01.mmd",
+      "sourceSha256": "aad6c04f79060b466883d6c20cdf93343145756f4a553b2d37d368009b9011b8",
+      "origin": "README.md",
+      "originDiagram": 1,
+      "originDiagramSha256": "94b963f8154a4794aec5a96cf87b6f87e59f8c7e001ed1f3e77eb90a0b26afce"
+    },
+    {
+      "id": "figure-0b5ca119d2-01",
+      "page": "docs/README.md",
+      "source": "docs/diagrams/figure-0b5ca119d2-01.mmd",
+      "sourceSha256": "8591e75a98b22ec97ff42e620f9016733c02d59fb66da70a3d07b09557e9005a",
+      "origin": "docs/README.md",
+      "originDiagram": 1,
+      "originDiagramSha256": "2f1471dbf3b0592b9fabc7e6df3ecd544a4ad2df064bb1e9bcb4a687d8cdaf50"
+    },
+    {
+      "id": "figure-ab5a8522bb-01",
+      "page": "docs/使用指南.md",
+      "source": "docs/diagrams/figure-ab5a8522bb-01.mmd",
+      "sourceSha256": "ce98b59dc1cffd9a66f65d038c22c2e13f0f402b90c86f5bf7148e0b74430177",
+      "origin": "docs/使用指南.md",
+      "originDiagram": 1,
+      "originDiagramSha256": "6aaa7dc6386833cb2ae5517b6c9a8e1be73678f315cf53aa9db2bcfed113ef96"
+    },
+    {
+      "id": "figure-ab5a8522bb-02",
+      "page": "docs/使用指南.md",
+      "source": "docs/diagrams/figure-ab5a8522bb-02.mmd",
+      "sourceSha256": "e4299a73473da7e1d92fe372a3da61546ea94f99a20fdcc55ba6b918a69f406e",
+      "origin": "docs/使用指南.md",
+      "originDiagram": 2,
+      "originDiagramSha256": "d5010eb702adeea41d6ad79fe145f8f77b96223647580e6b4e99d71044742509"
+    },
+    {
+      "id": "figure-93a1929f6a-01",
+      "page": "docs/功能设计.md",
+      "source": "docs/diagrams/figure-93a1929f6a-01.mmd",
+      "sourceSha256": "6fd95c83e5a21596a5ee603f799bf17e9be7b92fdce1b7ce679700af42890eeb",
+      "origin": "docs/功能设计.md",
+      "originDiagram": 1,
+      "originDiagramSha256": "6d8ac58e225893a3598f10331beecfd5d4ded28843bf41ff354a2508aa6b96b7"
+    },
+    {
+      "id": "figure-93a1929f6a-02",
+      "page": "docs/功能设计.md",
+      "source": "docs/diagrams/figure-93a1929f6a-02.mmd",
+      "sourceSha256": "a80b37a354e9f9fda1e8525355b7f234549b4fc28248061b202d86cf784108d0",
+      "origin": "docs/功能设计.md",
+      "originDiagram": 2,
+      "originDiagramSha256": "4bc46f69e19902db939052c2ca88ead22b2bdad4a59fa94e13b95d75504068c2"
+    },
+    {
+      "id": "figure-93a1929f6a-03",
+      "page": "docs/功能设计.md",
+      "source": "docs/diagrams/figure-93a1929f6a-03.mmd",
+      "sourceSha256": "2647dc48d9722da9c90078c537045441db65a61b1b04d40659acf19c7f9969de",
+      "origin": "docs/功能设计.md",
+      "originDiagram": 3,
+      "originDiagramSha256": "b84c27e8edf6045c5b8e5168a84b33f80a0699967909d0059abfca3c59f8b2be"
+    },
+    {
+      "id": "figure-5c4f6fce1b-01",
+      "page": "docs/安全与许可.md",
+      "source": "docs/diagrams/figure-5c4f6fce1b-01.mmd",
+      "sourceSha256": "e857c892f301f4c11c0cc2c6b8b8229d8ec5d63c2bf083853ea1fe5c715d1a95",
+      "origin": "docs/安全与许可.md",
+      "originDiagram": 1,
+      "originDiagramSha256": "45d4697ccf84bf7467b0853356c1618ef4c0b985a55debdab8f74ceb82945b88"
+    },
+    {
+      "id": "figure-77f968a207-01",
+      "page": "docs/开发指南.md",
+      "source": "docs/diagrams/figure-77f968a207-01.mmd",
+      "sourceSha256": "a76c1c2b857858ad5603646ae4fff3888e21e9db95b9f1f1203fb30982dbf423",
+      "origin": "docs/开发指南.md",
+      "originDiagram": 1,
+      "originDiagramSha256": "99993460f6f6b5c09c35068b89264ad9f308657dff30df18d1060d991a120faf"
+    },
+    {
+      "id": "figure-378a6f4089-01",
+      "page": "docs/插件连接.md",
+      "source": "docs/diagrams/figure-378a6f4089-01.mmd",
+      "sourceSha256": "6f7a273b3efe41119831a279de12ca74a119f344e0589c733ffbd07cbd87422f",
+      "origin": "docs/插件连接.md",
+      "originDiagram": 1,
+      "originDiagramSha256": "a00099e06d9a492d40dc042f990c020adb1f81e2573e14569e440c4dde999e3d"
+    },
+    {
+      "id": "figure-378a6f4089-02",
+      "page": "docs/插件连接.md",
+      "source": "docs/diagrams/figure-378a6f4089-02.mmd",
+      "sourceSha256": "a38ba44053760c2665530faa0d678ca78fc22b74bc8a2ae823682211e91f6840",
+      "origin": "docs/插件连接.md",
+      "originDiagram": 2,
+      "originDiagramSha256": "28ee6b934792cfaf219cb186d800f692af59940daa4c736e2786b5db4ed4a258"
+    },
+    {
+      "id": "figure-a3cd18cd19-01",
+      "page": "docs/架构与数据模型.md",
+      "source": "docs/diagrams/figure-a3cd18cd19-01.mmd",
+      "sourceSha256": "c76f6bb387976e6c24c3be5d6eedcc72dfcd584c9ad834993625bec92d96b859",
+      "origin": "docs/架构与数据模型.md",
+      "originDiagram": 1,
+      "originDiagramSha256": "c857811267d50a29290a42ecb3032e8a2b37d042907912555eecd2c96836f908"
+    },
+    {
+      "id": "figure-75a9c50a16-01",
+      "page": "docs/架构设计.md",
+      "source": "docs/diagrams/figure-75a9c50a16-01.mmd",
+      "sourceSha256": "a8c0fbf5db491693c08881935d0f5f4411a504c7d9503deccabbfe8b90f5374a",
+      "origin": "docs/架构设计.md",
+      "originDiagram": 1,
+      "originDiagramSha256": "53e745454d80bb93c9920d059dd15d1b7b3d68cce2dc5262caecd76ffee4f1cd"
+    },
+    {
+      "id": "figure-75a9c50a16-02",
+      "page": "docs/架构设计.md",
+      "source": "docs/diagrams/figure-75a9c50a16-02.mmd",
+      "sourceSha256": "c50e992526b58d0f26d65b26baec927b6e9ab917049e2f979c21392e63261486",
+      "origin": "docs/架构设计.md",
+      "originDiagram": 2,
+      "originDiagramSha256": "4430f76cf3128564f79087dce445be5c708ac4fa30bf995d4a7824ca06a76e54"
+    },
+    {
+      "id": "figure-75a9c50a16-03",
+      "page": "docs/架构设计.md",
+      "source": "docs/diagrams/figure-75a9c50a16-03.mmd",
+      "sourceSha256": "7a9bac41f9484db8ed01864a3480ec03853e9844f77cdb03999df2fa26a561cf",
+      "origin": "docs/架构设计.md",
+      "originDiagram": 3,
+      "originDiagramSha256": "f122cd11e33109392d74d8194de59a56996a13c3b9776c46420cecabb3340fe2"
+    },
+    {
+      "id": "figure-e34834487d-01",
+      "page": "docs/采集与隐私.md",
+      "source": "docs/diagrams/figure-e34834487d-01.mmd",
+      "sourceSha256": "04760f8d1497f7d841cd2552dbdc11a18efc5bf441bff4b039714e353723dd05",
+      "origin": "docs/采集与隐私.md",
+      "originDiagram": 1,
+      "originDiagramSha256": "2e01071514ece38b695a6e90208d5e0b6f1a5b6397728331032a06a62d5d42dc"
+    },
+    {
+      "id": "figure-library-forecast-01",
+      "page": "docs/词库与学习预测.md",
+      "source": "docs/diagrams/figure-library-forecast-01.mmd",
+      "sourceSha256": "19056187197c5a3000224fe92a62214ff11b0cb478d86f2315aca5d364f8b437",
+      "origin": "docs/词库与学习预测.md",
+      "originDiagram": 1,
+      "originDiagramSha256": "591d32b5448decd583716f0516c89ae44f9790cf34b06a77357434a1ca076d2a"
+    }
+  ]
+}

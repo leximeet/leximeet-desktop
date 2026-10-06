@@ -1,0 +1,10 @@
+flowchart TD
+  Clipboard[复制文本] --> Match[匹配当前学习目标]
+  Match -- 无匹配 --> Ignore[不提示 不采集]
+  Match -- 匹配 --> Sentence[目标词所在句子]
+  Manual[手动或插件采集] --> Sentence
+  Sentence --> Privacy[脱敏 限长 校验位置]
+  Privacy --> Duplicate(同词同安全句七天内已有):::decision
+  Duplicate -- 是 --> Existing[返回已有遇见]
+  Duplicate -- 否 --> Save[事务保存新遇见]
+  Save --> Notice[按设置发送真实成功通知]

@@ -1,0 +1,434 @@
+/* 列表与阅读区各自滚动。宽度不足时停靠区排到下方，绝不盖住列表。 */
+.d-library {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding-top: 28px;
+}
+.d-library > .page-heading {
+  padding: 0 28px;
+  margin-bottom: 22px;
+}
+.library-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0 28px 18px;
+  border-bottom: 1px solid var(--line);
+  flex: none;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.library-status-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--subtle);
+}
+.library-status-tabs button {
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  padding: 7px 14px;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.library-status-tabs button[aria-selected="true"] {
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: 0 1px 3px #00000012;
+}
+.library-status-tabs button:hover {
+  color: var(--accent);
+}
+@media (max-width: 1000px) {
+  .library-toolbar {
+    gap: 12px;
+  }
+  .library-toolbar .search-field {
+    width: 100%;
+    max-width: none;
+  }
+}
+.search-field {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  width: 340px;
+  max-width: 65%;
+  gap: 8px;
+  border: 1px solid var(--line);
+  background: var(--subtle);
+  border-radius: 6px;
+  padding-left: 10px;
+}
+.search-field input {
+  background: transparent;
+  border: 0;
+  padding: 7px 5px;
+}
+.search-field:focus-within {
+  border-color: var(--accent);
+}
+.search-field input:focus-visible {
+  outline: 0;
+}
+.search-field .icon {
+  width: 15px;
+  height: 15px;
+}
+.list-card-split {
+  display: grid;
+  grid-template-columns: minmax(520px, 1.2fr) minmax(380px, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+.d-library.reader-closed .list-card-split {
+  grid-template-columns: 1fr;
+}
+.d-word-list {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.word-table-scroll {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+.word-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  table-layout: fixed;
+}
+.word-table th {
+  color: var(--soft);
+  font-weight: 500;
+  font-size: 11px;
+  height: 42px;
+  background: var(--subtle);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.word-table th,
+.word-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.library-table .col-word {
+  width: 150px;
+}
+.library-table .col-state {
+  width: 88px;
+}
+.library-table .col-next {
+  width: 32px;
+}
+.library-table th:first-child,
+.library-table td:first-child {
+  padding-left: 24px;
+}
+.library-table th:last-child,
+.library-table td:last-child {
+  padding: 0 8px 0 0;
+}
+.library-table td {
+  height: 48px;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.library-table .word-column {
+  font-weight: 500;
+  color: var(--text);
+}
+.library-table .meaning-column {
+  color: var(--muted);
+}
+.library-table .word-status {
+  font-size: 11px;
+  color: var(--muted);
+}
+.library-table .word-status.learning {
+  color: var(--accent);
+}
+.library-table .word-status.mastered {
+  color: var(--tone-familiar);
+}
+.library-table tr {
+  cursor: pointer;
+}
+.library-table tr:hover {
+  background: var(--hover);
+}
+.library-table tr.selected {
+  background: var(--accent-soft);
+}
+.library-table tr.selected td:first-child {
+  color: var(--accent);
+  box-shadow: inset 2px 0 var(--accent);
+}
+.library-table td > .icon {
+  width: 13px;
+  height: 13px;
+  opacity: 0.35;
+}
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  color: var(--soft);
+  font-size: 12px;
+  padding: 10px 20px;
+  flex: none;
+}
+.d-detail-column {
+  min-width: 0;
+  min-height: 0;
+  border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+}
+.reader-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 20px 5px 28px;
+  min-height: 43px;
+  border-bottom: 1px solid var(--line);
+  flex: none;
+  font-size: 11px;
+  color: var(--soft);
+}
+.reader-scroll {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+.restore-word {
+  margin: 20px 28px 0;
+}
+.d-word-card {
+  padding: 24px 28px 14px;
+}
+.reader-heading .eyebrow {
+  font-size: 10px;
+  margin-bottom: 6px;
+}
+.reader-heading h2 {
+  font: 400 36px/1.25 var(--reading-font);
+  overflow-wrap: anywhere;
+  letter-spacing: -0.4px;
+}
+.word-pronunciation {
+  margin: 12px 0 16px;
+}
+.word-pronunciation > p {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.word-pronunciation .text-button {
+  font-size: 12px;
+}
+.word-pronunciation small {
+  color: var(--soft);
+  font-size: 11px;
+}
+.word-overview {
+  margin: 18px 0 12px;
+}
+.word-summary {
+  font-size: 15px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.word-classifications {
+  font-size: 11px;
+  color: var(--soft);
+  margin: 10px 0;
+}
+.reader-tabs {
+  gap: 23px;
+  margin-top: 24px;
+}
+.reader-tabs small {
+  font-size: 10px;
+  margin-left: 5px;
+}
+.reader-edit {
+  margin-left: auto;
+  position: relative;
+}
+.draft-dot {
+  position: absolute;
+  top: 6px;
+  right: 4px;
+  width: 5px;
+  height: 5px;
+  background: var(--amber);
+  border-radius: 50%;
+}
+.reader-content {
+  padding-top: 20px;
+  font-size: 14px;
+  line-height: 1.8;
+}
+.context-entry {
+  margin-bottom: 24px;
+}
+.context-source {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--soft);
+  font-size: 11px;
+  margin-bottom: 12px;
+}
+.context-entry blockquote {
+  margin: 0 0 12px;
+  font: 21px/1.65 var(--reading-font);
+  overflow-wrap: anywhere;
+}
+.meaning-intro {
+  margin-bottom: 22px;
+}
+.sense-entry {
+  margin: 0 0 24px;
+}
+.sense-entry h3 {
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.sense-entry em {
+  color: var(--muted);
+  font: italic 14px var(--reading-font);
+  margin-right: 10px;
+}
+.sense-entry blockquote {
+  margin: 16px 0 0;
+}
+.sense-entry blockquote p {
+  font: 18px/1.6 var(--reading-font);
+}
+.sense-entry blockquote small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+}
+.extra-evidence > p {
+  margin: 8px 0 16px;
+}
+.source-details {
+  margin: 24px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--muted);
+}
+.source-details summary {
+  cursor: pointer;
+}
+.source-details p {
+  margin-top: 8px;
+}
+.reading-section {
+  margin-bottom: 24px;
+}
+.reading-section > h3 {
+  margin-bottom: 10px;
+}
+.reading-section .section-heading {
+  margin: 0 0 10px;
+}
+.relation-options {
+  padding: 0;
+  margin: 14px 0;
+  border: 0;
+  display: flex;
+  gap: 10px 18px;
+  flex-wrap: wrap;
+}
+.relation-options legend {
+  font-size: 12px;
+  color: var(--soft);
+  padding: 0 0 8px;
+}
+.relation-options .inline-check {
+  font-size: 13px;
+}
+.reader-save {
+  padding: 16px 0 8px;
+  border-top: 1px solid var(--line);
+}
+.word-personal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+}
+.word-personal-actions .action-menu-items {
+  top: auto;
+  bottom: 100%;
+}
+@media (max-width: 1180px) {
+  .d-library {
+    flex: none;
+    min-height: 100%;
+  }
+  .list-card-split {
+    display: flex;
+    flex-direction: column;
+    flex: none;
+  }
+  .word-table-scroll {
+    max-height: 330px;
+    flex: none;
+  }
+  .d-detail-column {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+  .reader-scroll {
+    overflow: visible;
+  }
+  .d-word-card {
+    max-width: 800px;
+    width: 100%;
+    margin: 0 auto;
+  }
+  .d-library > .page-heading {
+    padding: 0 24px;
+  }
+  .library-toolbar {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+}
+@media (max-width: 860px) {
+  .library-actions {
+    gap: 4px;
+  }
+  .library-table .col-word {
+    width: 130px;
+  }
+  .d-word-card {
+    padding: 22px;
+  }
+}

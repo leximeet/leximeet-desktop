@@ -1,0 +1,250 @@
+{
+  "capturedAt": "2026-10-05",
+  "desktopCheckout": "4692f6bdbc3e456531b7b1d5cf136b42cd32beb9",
+  "browserCheckout": "761b14904f5aec4e040fc462c9ed6aa419718eb5",
+  "scope": "真实隐藏应用与隔离 Core；仅公开合成资料，非正式安装或系统可见通知验收",
+  "images": [
+    {
+      "file": "note-multiple-books.png",
+      "width": 1321,
+      "height": 1040,
+      "bytes": 114046,
+      "sha256": "375ffa1c6482c7f023b35ca3ae2c587e003c1ef4965f1c0b87530580588e5470",
+      "suite": "docs-note-capture.spec.cjs"
+    },
+    {
+      "file": "note-saved.png",
+      "width": 1321,
+      "height": 1040,
+      "bytes": 114487,
+      "sha256": "d200d086e2b73cd5a400c59b9ab30ca5bbc7c709d66a183d42f6867f683f8eb5",
+      "suite": "docs-note-capture.spec.cjs"
+    },
+    {
+      "file": "note-multiple-books-dark.png",
+      "width": 1321,
+      "height": 1040,
+      "bytes": 114555,
+      "sha256": "ebf7e187488623522cc8d3dc8cd66c0838b4e59b7673b89b04183b34a51b8cc2",
+      "suite": "docs-note-capture.spec.cjs"
+    },
+    {
+      "file": "connected-desktop-encounters.png",
+      "width": 1321,
+      "height": 896,
+      "bytes": 81029,
+      "sha256": "fdcc6349733852860c31808b1d02dd8d4077a9423f931198a2976424fc9a85ea",
+      "suite": "reading-ui.spec.ts"
+    }
+  ],
+  "coreRuntime": {
+    "jar": "core-java/target/leximeet-core.jar",
+    "bytes": 24569196,
+    "sha256": "652ba56eb63a6fa6148ed5543abfbefbfd11ad5501ed96c91557b185a38ec930",
+    "rebuiltForCapture": false,
+    "checkoutAtNoteCapture": "99de10fa8dbd7db7bd3b0f73803095ca3747e71d",
+    "checkoutAtConnectedLaunch": "8603bf2c7da7678d6a1ccafecf2244d0a809b567",
+    "description": "复用既有运行 Jar；Core 后续改动仅为文档、注释。checkout 描述源码状态，不表示重新构建该 Jar。"
+  },
+  "historicalEvidence": "既有笔记与连接图片来自此前保存的开发源码演示，旧开发提交不属于当前公开 main 的可检出来源；不能作为正式安装器或本轮新 Schema 双端验收证据。",
+  "currentCaptures": [
+    {
+      "file": "choice-feedback.png",
+      "capturedAt": "2026-10-05T14:35:32.249309+00:00",
+      "width": 1321,
+      "height": 896,
+      "bytes": 131814,
+      "sha256": "8751dbaeec40d33148bf8f3dcb11fa9bc8a931537444a9f1f35a8d25f8eaa0df",
+      "suite": "practice-usage-capture.spec.cjs",
+      "desktopSourceVersion": "1.0.0",
+      "coreRuntimeJarSha256": "dac0f5e434ccad87f90af625189e1f7ad3abe263f68edd16f526b2862ede4aa5",
+      "scope": "当前源码真实隐藏 Electron 与隔离 Core 使用演示；公开合成资料，不代表正式安装、Browser 联调或系统通知可见展示。"
+    },
+    {
+      "file": "copy-dark-narrow.png",
+      "capturedAt": "2026-10-05T14:36:01.909610+00:00",
+      "width": 820,
+      "height": 728,
+      "bytes": 86337,
+      "sha256": "c09ecc52f7ca6768ca0ff759d8f28d164fc9a2a482e8fc7a4c2fe95c182410dc",
+      "suite": "practice-usage-capture.spec.cjs",
+      "desktopSourceVersion": "1.0.0",
+      "coreRuntimeJarSha256": "dac0f5e434ccad87f90af625189e1f7ad3abe263f68edd16f526b2862ede4aa5",
+      "scope": "当前源码真实隐藏 Electron 与隔离 Core 使用演示；公开合成资料，不代表正式安装、Browser 联调或系统通知可见展示。"
+    },
+    {
+      "file": "copy-dark.png",
+      "capturedAt": "2026-10-05T14:36:01.834094+00:00",
+      "width": 1321,
+      "height": 864,
+      "bytes": 96771,
+      "sha256": "ea11f8b4ffd2800d732a78bb866da54e806f669c5c33316740d79b0e3e22dad4",
+      "suite": "practice-usage-capture.spec.cjs",
+      "desktopSourceVersion": "1.0.0",
+      "coreRuntimeJarSha256": "dac0f5e434ccad87f90af625189e1f7ad3abe263f68edd16f526b2862ede4aa5",
+      "scope": "当前源码真实隐藏 Electron 与隔离 Core 使用演示；公开合成资料，不代表正式安装、Browser 联调或系统通知可见展示。"
+    },
+    {
+      "file": "copy-light.png",
+      "capturedAt": "2026-10-05T14:36:01.705150+00:00",
+      "width": 1321,
+      "height": 864,
+      "bytes": 96961,
+      "sha256": "b4612982fec568fd1e6faedfeac408e05bbcbf661490505e05362c8872e6677c",
+      "suite": "practice-usage-capture.spec.cjs",
+      "desktopSourceVersion": "1.0.0",
+      "coreRuntimeJarSha256": "dac0f5e434ccad87f90af625189e1f7ad3abe263f68edd16f526b2862ede4aa5",
+      "scope": "当前源码真实隐藏 Electron 与隔离 Core 使用演示；公开合成资料，不代表正式安装、Browser 联调或系统通知可见展示。"
+    },
+    {
+      "file": "encounters.png",
+      "capturedAt": "2026-10-05T14:36:00.855149+00:00",
+      "width": 1321,
+      "height": 864,
+      "bytes": 69046,
+      "sha256": "38df2ed0500f505d366e8b7e4f0a7d2f9b19cbda3627671bb864d7b33986b470",
+      "suite": "practice-usage-capture.spec.cjs",
+      "desktopSourceVersion": "1.0.0",
+      "coreRuntimeJarSha256": "dac0f5e434ccad87f90af625189e1f7ad3abe263f68edd16f526b2862ede4aa5",
+      "scope": "当前源码真实隐藏 Electron 与隔离 Core 使用演示；公开合成资料，不代表正式安装、Browser 联调或系统通知可见展示。"
+    },
+    {
+      "file": "first-open.png",
+      "capturedAt": "2026-10-05T14:35:59.309078+00:00",
+      "width": 1321,
+      "height": 864,
+      "bytes": 117305,
+      "sha256": "4eb11bfbf58e01444b4ca4690eed6968845f806174cf9b5a58bfb93ad2e89d85",
+      "suite": "practice-usage-capture.spec.cjs",
+      "desktopSourceVersion": "1.0.0",
+      "coreRuntimeJarSha256": "dac0f5e434ccad87f90af625189e1f7ad3abe263f68edd16f526b2862ede4aa5",
+      "scope": "当前源码真实隐藏 Electron 与隔离 Core 使用演示；公开合成资料，不代表正式安装、Browser 联调或系统通知可见展示。"
+    },
+    {
+      "file": "manual-capture.png",
+      "capturedAt": "2026-10-05T14:35:59.945433+00:00",
+      "width": 540,
+      "height": 620,
+      "bytes": 20927,
+      "sha256": "2075006f0c9edb2031de3acf7b3598e2506fb8c55fe408615386440a94696010",
+      "suite": "practice-usage-capture.spec.cjs",
+      "desktopSourceVersion": "1.0.0",
+      "coreRuntimeJarSha256": "dac0f5e434ccad87f90af625189e1f7ad3abe263f68edd16f526b2862ede4aa5",
+      "scope": "当前源码真实隐藏 Electron 与隔离 Core 使用演示；公开合成资料，不代表正式安装、Browser 联调或系统通知可见展示。",
+      "sourceFile": "frontend/src/desktop/CaptureWindow.vue",
+      "sourceFileSha256": "daa8130f6f30473b03f793c97029e3318aa29e0ab0312c9f4d4039501a8e629f"
+    },
+    {
+      "file": "planning-schedule.png",
+      "capturedAt": "2026-10-05T14:36:02.453753+00:00",
+      "width": 1321,
+      "height": 864,
+      "bytes": 94239,
+      "sha256": "2e6222f1dcd9d09557f0e11561a666dd139a1019709b26a9704ffa899455338b",
+      "suite": "practice-usage-capture.spec.cjs",
+      "desktopSourceVersion": "1.0.0",
+      "coreRuntimeJarSha256": "dac0f5e434ccad87f90af625189e1f7ad3abe263f68edd16f526b2862ede4aa5",
+      "scope": "当前源码真实隐藏 Electron 与隔离 Core 使用演示；公开合成资料，不代表正式安装、Browser 联调或系统通知可见展示。"
+    },
+    {
+      "file": "planning-target.png",
+      "capturedAt": "2026-10-05T14:36:01.093868+00:00",
+      "width": 1321,
+      "height": 864,
+      "bytes": 98747,
+      "sha256": "adb58b6b84c7469cb22dba8cf980eb1c33a56f37ef653ae03fdc4aede917a6c3",
+      "suite": "practice-usage-capture.spec.cjs",
+      "desktopSourceVersion": "1.0.0",
+      "coreRuntimeJarSha256": "dac0f5e434ccad87f90af625189e1f7ad3abe263f68edd16f526b2862ede4aa5",
+      "scope": "当前源码真实隐藏 Electron 与隔离 Core 使用演示；公开合成资料，不代表正式安装、Browser 联调或系统通知可见展示。"
+    },
+    {
+      "file": "practice-list.png",
+      "capturedAt": "2026-10-05T14:36:01.534098+00:00",
+      "width": 1321,
+      "height": 864,
+      "bytes": 73504,
+      "sha256": "fe455cdc53d54a1bd1873c5425704c803c5d9abb00796e07b1f69b737f00ae50",
+      "suite": "practice-usage-capture.spec.cjs",
+      "desktopSourceVersion": "1.0.0",
+      "coreRuntimeJarSha256": "dac0f5e434ccad87f90af625189e1f7ad3abe263f68edd16f526b2862ede4aa5",
+      "scope": "当前源码真实隐藏 Electron 与隔离 Core 使用演示；公开合成资料，不代表正式安装、Browser 联调或系统通知可见展示。"
+    },
+    {
+      "file": "today.png",
+      "capturedAt": "2026-10-05T14:35:59.392939+00:00",
+      "width": 1321,
+      "height": 864,
+      "bytes": 95781,
+      "sha256": "947badad9f47855370eaa15ca861452d0167b43bad3a82de80d3bd1bc17df1f9",
+      "suite": "practice-usage-capture.spec.cjs",
+      "desktopSourceVersion": "1.0.0",
+      "coreRuntimeJarSha256": "dac0f5e434ccad87f90af625189e1f7ad3abe263f68edd16f526b2862ede4aa5",
+      "scope": "当前源码真实隐藏 Electron 与隔离 Core 使用演示；公开合成资料，不代表正式安装、Browser 联调或系统通知可见展示。"
+    },
+    {
+      "file": "word-library.png",
+      "capturedAt": "2026-10-05T14:36:00.975542+00:00",
+      "width": 1321,
+      "height": 864,
+      "bytes": 99984,
+      "sha256": "73f682b4274c6a7741ecde37828dce1c7feb9011ecb4c1e25ec26c7d983300ed",
+      "suite": "practice-usage-capture.spec.cjs",
+      "desktopSourceVersion": "1.0.0",
+      "coreRuntimeJarSha256": "dac0f5e434ccad87f90af625189e1f7ad3abe263f68edd16f526b2862ede4aa5",
+      "scope": "当前源码真实隐藏 Electron 与隔离 Core 使用演示；公开合成资料，不代表正式安装、Browser 联调或系统通知可见展示。"
+    },
+    {
+      "file": "word-note.png",
+      "capturedAt": "2026-10-05T14:36:02.185918+00:00",
+      "width": 1321,
+      "height": 864,
+      "bytes": 99500,
+      "sha256": "193d8ad1606a609b49c9ca4c3cef1d926a2e5c4f392374447c7a01670c2d6855",
+      "suite": "practice-usage-capture.spec.cjs",
+      "desktopSourceVersion": "1.0.0",
+      "coreRuntimeJarSha256": "dac0f5e434ccad87f90af625189e1f7ad3abe263f68edd16f526b2862ede4aa5",
+      "scope": "当前源码真实隐藏 Electron 与隔离 Core 使用演示；公开合成资料，不代表正式安装、Browser 联调或系统通知可见展示。"
+    }
+  ],
+  "currentRuntime": {
+    "captureSuiteSha256": "262f0a04e6ddcd630b6f644e22b201295f554ea5914a4bc2388fec3227059f96",
+    "coreJarBytes": 24579354,
+    "coreJarSha256": "dac0f5e434ccad87f90af625189e1f7ad3abe263f68edd16f526b2862ede4aa5",
+    "coreSourceAtBuild": "ae6be9e014cc226accdd4ac52c8803cef951164c",
+    "coreSourceAtCapture": "0fe50fd57f1bd4ccb734d29c99e5e685d5dd6032",
+    "description": "最终正文勘误提交仅改变文档；截图执行的是已构建的大型范围冻结修复 Jar。",
+    "frontendFiles": [
+      {
+        "file": "frontend/dist/assets/index-BmFi-uig.css",
+        "bytes": 50536,
+        "sha256": "71c14746f3ab2409d1f56a227cf4cfe9011bc510846c953cc2bd46ccd666e271"
+      },
+      {
+        "file": "frontend/dist/assets/index-CtHBdi3T.js",
+        "bytes": 276636,
+        "sha256": "39e87799c7ecf3a7db09de33b4425ea0f74a912f88ae8aeb73495b0cfe3fb8ad"
+      },
+      {
+        "file": "frontend/dist/assets/keyboard-thock-NxMuI4s8.mp3",
+        "bytes": 2088,
+        "sha256": "0e8030c4e3c32bde47ec4873d30e2700611cea71de0ad9c5f0c48e5200b8a3cd"
+      },
+      {
+        "file": "frontend/dist/assets/logo-dark-BBZUWRUN.png",
+        "bytes": 250482,
+        "sha256": "debeac1dba6d864d911f5ae796eca6c8c2fa5af11aecfe686cbeb036c8699d24"
+      },
+      {
+        "file": "frontend/dist/assets/logo-light-B89NCplw.png",
+        "bytes": 232017,
+        "sha256": "fd2e4f1d8278eaa36cc686eafc3d60bd6fcb69a8a3ab9f7a57f6d6126ffcfd43"
+      },
+      {
+        "file": "frontend/dist/index.html",
+        "bytes": 710,
+        "sha256": "3f8e59201fab4bacd0eca6bb507d11e1be65175184a0254c41e9296e5a8cfedc"
+      }
+    ]
+  }
+}

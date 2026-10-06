@@ -1,0 +1,3 @@
+[submodule "core-java"]
+	path = core-java
+	url = https://github.com/leximeet/leximeet-desktop-core.git

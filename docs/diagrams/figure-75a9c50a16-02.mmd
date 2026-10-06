@@ -1,0 +1,15 @@
+sequenceDiagram
+  participant Launcher as 启动脚本
+  participant Main
+  participant Java as JavaRuntime
+  participant Core
+  participant UI as Renderer
+  Launcher->>Main: 明确资料空间与运行环境
+  Main->>Java: 启动当前 Jar
+  Java->>Core: 独立令牌与资料目录
+  Core-->>Java: 已准备的动态回环端口
+  Main->>Core: 挂载并验证文本词典
+  Main->>Core: 读取设置
+  Main-->>UI: 完整业务就绪
+  UI->>Main: desktopState / runtime
+  Main-->>UI: 资料状态与能力状态
