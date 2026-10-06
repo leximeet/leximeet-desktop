@@ -4,7 +4,7 @@
 
 ## [未发布]
 
-- 修正 Core 子模块测试残留的 GitHub 固定地址要求，增加两个平台 HTTPS / SSH 相对来源解析检查，并保留固定提交空检出验证；同步 Core 的 Windows 路径与权限测试夹具修复。
+- 修正 Core 子模块测试残留的 GitHub 固定地址要求，增加两个平台 HTTPS / SSH 相对来源解析检查，并保留固定提交空检出验证；同步 Core 的 Windows 路径与权限测试夹具修复（包含挂载拒绝用例）。
 
 - 更新固定的 Desktop Core 提交，纳入 Windows CI 的 Maven 参数解析修复；子模块仍以精确提交复现构建。
 
