@@ -1,5 +1,8 @@
-build(desktop): 更新 Core 固定提交以纳入跨平台 CI 修复
+test(desktop): 对齐双平台子模块检查并更新 Core 验证修复
 
-- 引用已修复 Windows PowerShell 参数解析的 Core 提交
-- 保持业务逻辑、冻结协议与正式标签不变
-- 通过文档、格式和 gitlink 检查；完整宿主与打包验证以本提交 CI 为准
+- 使用 Git 实际解析 GitHub 与 Gitee 的 HTTPS、SSH 相对来源
+- 保留本地空检出和固定 gitlink 校验，测试不依赖网络或全局配置
+- 更新 Core 固定提交，纳入 Windows 路径与权限夹具修复
+- 更新 CI 文档，区分地址解析检查与远端递归检出验证
+
+验证：326 项单元、格式、文档与 gitlink 空检出检查通过；完整远端结果以本提交为准。
