@@ -15,7 +15,7 @@
 
 [跟随截图完成一次使用](docs/操作演示.md)：设置目标、手动采集、保存笔记、多词本整理与六种练习。
 
-**1.0.0 为本地正式版本，远端发布尚未执行。** 使用时无需账号；云登录与独立设备同步计划在 2.0.0 实现。目前实际验证的平台是 macOS arm64，其他平台的构建配置不能代表验收完成。
+**当前源码版本为 1.0.0；正式标签与发行物尚未发布。** 使用时无需账号；云登录与独立设备同步计划在 2.0.0 实现。目前实际验证的平台是 macOS arm64，其他平台的构建配置不能代表验收完成。
 
 ![明亮主题：词库与语境](docs/screenshots/library-light.png)
 
@@ -26,9 +26,11 @@
 
 </details>
 
+源码与协作：[GitHub](https://github.com/leximeet/leximeet-desktop) · [Gitee](https://gitee.com/leximeet/leximeet-desktop)。两个平台平级；下载时请核对对应版本的发行说明与校验文件。
+
 ## 快速体验
 
-完整检出需要 Core 子模块。在仓库根目录执行：
+从 [GitHub](https://github.com/leximeet/leximeet-desktop) 或 [Gitee](https://gitee.com/leximeet/leximeet-desktop) 检出代码均需 Core 子模块。子模块使用同平台、同组织下的相对地址。在仓库根目录执行：
 
 ```bash
 git submodule update --init core-java
@@ -105,4 +107,4 @@ bash scripts/test-desktop.sh --journey
 
 代码采用 [AGPL-3.0-only](LICENSE)。分发二进制须附对应源码和第三方许可，详见[安全与许可](docs/安全与许可.md)。
 
-感谢 [leximeet-dictionary](https://github.com/leximeet/leximeet-dictionary)、[Qwerty Learner](https://github.com/RealKai42/qwerty-learner)、[Aictionary](https://github.com/ahpxex/Aictionary)、[pot-desktop](https://github.com/pot-app/pot-desktop)、[Maccy](https://github.com/p0deje/Maccy)、[Electron](https://github.com/electron/electron)、[Vue](https://github.com/vuejs/core) 和 [OpenJDK](https://openjdk.org/)。参考交互与实现思路不表示复制全部能力；实际资源来源和许可以随包 notice 为准。
+感谢 leximeet-dictionary（[GitHub](https://github.com/leximeet/leximeet-dictionary) · [Gitee](https://gitee.com/leximeet/leximeet-dictionary)）、[Qwerty Learner](https://github.com/RealKai42/qwerty-learner)、[Aictionary](https://github.com/ahpxex/Aictionary)、[pot-desktop](https://github.com/pot-app/pot-desktop)、[Maccy](https://github.com/p0deje/Maccy)、[Electron](https://github.com/electron/electron)、[Vue](https://github.com/vuejs/core) 和 [OpenJDK](https://openjdk.org/)。参考交互与实现思路不表示复制全部能力；实际资源来源和许可以随包 notice 为准。

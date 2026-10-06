@@ -1,5 +1,9 @@
 # 参与贡献
 
+GitHub 和 Gitee 是平级的代码与协作平台，可在任一平台阅读源码、提交 Issue 或发起 Pull Request。同一问题请保留一个主讨论地址；跨平台补充时互相链接，避免重复处理。
+
+[GitHub 仓库](https://github.com/leximeet/leximeet-desktop) · [Gitee 仓库](https://gitee.com/leximeet/leximeet-desktop)
+
 先阅读[文档索引](docs/README.md)和[开发指南](docs/开发指南.md)。小改动先讨论要解决的具体问题；大改动还需说明用户行为、数据关系，以及验收边界。
 
 - 使用锁文件与固定 Core gitlink；不要提交个人环境、数据库、凭证或临时资源。
