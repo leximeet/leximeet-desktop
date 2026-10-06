@@ -1,5 +1,5 @@
-docs(desktop): 完善 GitHub 与 Gitee 平级协作和发布说明
+build(desktop): 更新 Core 固定提交以纳入跨平台 CI 修复
 
-并列源码入口与安全报告渠道，说明同版本标签、源码和发行物校验规则。
-保留真实 GitHub Actions 和 Dictionary 下载来源，最终验收后再创建正式标签。
-Core 子模块使用同平台相对地址，更新固定 gitlink 及克隆、Fork 操作说明。
+- 引用已修复 Windows PowerShell 参数解析的 Core 提交
+- 保持业务逻辑、冻结协议与正式标签不变
+- 通过文档、格式和 gitlink 检查；完整宿主与打包验证以本提交 CI 为准

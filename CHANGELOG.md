@@ -4,6 +4,8 @@
 
 ## [未发布]
 
+- 更新固定的 Desktop Core 提交，纳入 Windows CI 的 Maven 参数解析修复；子模块仍以精确提交复现构建。
+
 - GitHub 与 Gitee 并列提供源码、贡献及发布入口，说明同版本源码、标签与发行文件的一致性要求。
 - 区分现有 GitHub Actions、词典下载来源与 Gitee 仓库托管，正式标签在最终验收后创建。
 - Desktop Core 子模块改为同平台的相对地址，补充已有检出与 Fork 配置方法。
