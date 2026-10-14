@@ -51,8 +51,14 @@ async function writeBuildManifest({ root, output, mode, version, sources }) {
       sha256: await digest(path.join(output, name)),
     });
   const current = { desktop: sourceState(root), core: sourceState(path.join(root, "core-java")) };
-  if (sources && JSON.stringify(current) !== JSON.stringify(sources))
-    throw new Error("构建期间源码提交或干净状态发生变化，请重新构建同一候选");
+  if (sources && JSON.stringify(current) !== JSON.stringify(sources)) {
+    const porcelain = spawnSync("git", ["status", "--porcelain"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const detail = porcelain.stdout?.trim() ? `\n${porcelain.stdout.trim()}` : "";
+    throw new Error(`构建期间源码提交或干净状态发生变化，请重新构建同一候选${detail}`);
+  }
   sources ||= current;
   const contract = JSON.parse(fs.readFileSync(path.join(root, "resources/lmcp/contract.json")));
   const dictionary = JSON.parse(

@@ -12,7 +12,7 @@ bash scripts/test-background.sh
 
 也可使用 `npm run test:background`。脚本复用现有 Node.js 24+ / JDK 21 / Maven 3.9 的隔离环境准备，并将测试进程优先级降低 10。Desktop 单元最多同时运行两个文件，Electron 串行运行；降低优先级不等于没有 CPU / 内存开销。
 
-`bash scripts/test-desktop.sh --verify` 与 `npm run verify:desktop` 保留为兼容入口。直接使用 npm 时须先准备 JDK 21。`test:desktop` 单独运行当前 Electron 用例，`test:package:desktop` 验证本平台的实际应用包。
+`bash scripts/test-desktop.sh --verify` 与 `npm run verify:desktop` 保留为兼容入口。直接使用 npm 时须先准备 JDK 21。`test:desktop` 单独运行当前 Electron 用例，`test:package:desktop` 验证本平台的实际应用包，并在 Playwright globalSetup 中自行准备锁定的 Full 测试源，不依赖 verify 分片的工作目录。
 
 七天连续使用另有后台入口 `bash scripts/test-desktop.sh --journey`：首启、普通/教学练习回归、七天、明暗视觉分别报告；日期由 test profile 内的业务时钟文件推进，不改变系统时间。两份不同版本真实应用的升级专项使用 `--journey --upgrade 旧可执行文件 新可执行文件`。完整说明见[日常使用与升级测试](日常使用与升级测试.md)。
 
@@ -72,7 +72,7 @@ Windows / Linux 仍使用隐藏窗口、静音、受控输入和资源隔离，�
 | visual.yml         | 手动运行当前真实原生使用链路及明暗/窄窗截图，供人工审查；不宣称像素比较通过                                                                                                                                                    |
 | candidate.yml      | 三端矩阵构建全部安装包（mac dmg/zip、win nsis、linux AppImage+deb），真实安装验证与对应源码；三端齐套后合并 feed / SHA256SUMS 再公开 Release                                                                                   |
 
-`ci.yml` 作业预算：lint 5 分钟，macOS / Ubuntu 各 25 分钟，Windows core-cross 20 分钟，install-smoke 10 分钟。Linux / Windows 安装冒烟不再等待 macOS。启用 npm、Maven、`.runtime/electron-cache` 与 electron-builder 缓存。Windows **core-cross** 在单元/Core 测试前把工作区、TEMP 与 `java.exe`/`javaw.exe` 加入 Defender 排除，并把 `TEMP`/`TMP` 指到工作区内的 `.runtime/ci-tmp`；不注入 `JAVA_TOOL_OPTIONS`。不修改 Core 的 15 秒产品预算。**install-smoke 的 Windows 任务不排除 Defender**，并确认实时保护开启。产品侧 Desktop 等待 Core 握手：POSIX 45 秒，Windows 120 秒。Windows 启动 Core 用 `javaw`，父进程立刻关掉 stderr 文件句柄，避免 `close` 死锁；门禁脚本超时后打印进程树。业务请求的 15 秒预算、单例断言和零重试策略保持不变；作业预算不代表实测耗时或远端检查已经通过。
+`ci.yml` 作业预算：lint 5 分钟，macOS / Ubuntu 各 25 分钟，Windows core-cross 20 分钟，install-smoke 10 分钟。Linux / Windows 安装冒烟不再等待 macOS；对应平台打包失败则该平台 smoke 跳过，不下载空产物。启用 npm、Maven、`.runtime/electron-cache` 与 electron-builder 缓存。Windows **core-cross** 在单元/Core 测试前把工作区、TEMP 与 `java.exe`/`javaw.exe` 加入 Defender 排除，并把 `TEMP`/`TMP` 指到工作区内的 `.runtime/ci-tmp`；不注入 `JAVA_TOOL_OPTIONS`。不修改 Core 的 15 秒产品预算。**install-smoke 的 Windows 任务不排除 Defender**，并确认实时保护开启。产品侧 Desktop 等待 Core 握手：POSIX 45 秒，Windows 120 秒。Windows 启动 Core 用 `javaw`，父进程立刻关掉 stderr 文件句柄，避免 `close` 死锁；失败分类在 exit 后再读 stderr 文件；`stop` 立刻 `taskkill /T` 并拆掉 stdout。门禁脚本超时后打印进程树。业务请求的 15 秒预算、单例断言和零重试策略保持不变；作业预算不代表实测耗时或远端检查已经通过。
 
 Core 子模块单元测试在临时空仓中让 Git 解析相对来源，覆盖 GitHub / Gitee 的 HTTPS 与 SSH 地址；随后从本地 Core 检出固定 gitlink 并核对源码。解析检查不访问网络，也不改开发者的远端或全局配置；远端是否能取得该提交仍由实际递归检出验证。
 

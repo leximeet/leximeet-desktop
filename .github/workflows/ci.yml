@@ -285,7 +285,6 @@ jobs:
   install-smoke-windows:
     name: Install smoke (windows-2025, nsis)
     needs: windows-package
-    if: ${{ !cancelled() }}
     runs-on: windows-2025
     timeout-minutes: 10
     defaults:
@@ -339,7 +338,6 @@ jobs:
   install-smoke-linux:
     name: Install smoke (ubuntu-24.04, ${{ matrix.kind }})
     needs: ubuntu-package
-    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:

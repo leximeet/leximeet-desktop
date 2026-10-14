@@ -29,8 +29,14 @@ test("CI 按平台拆开 smoke，lint 不阻塞，超时与 concurrency 符合�
     true,
   );
   assert.equal(workflow.includes("needs: ubuntu-package"), true);
+  assert.equal(workflow.includes("if: ${{ !cancelled() }}"), false);
   assert.equal(workflow.includes("needs: desktop"), false);
   assert.equal(workflow.includes("needs: lint"), false);
+  const packagePlaywright = fs.readFileSync(
+    path.join(__dirname, "../../playwright.desktop-package.config.cjs"),
+    "utf8",
+  );
+  assert.equal(packagePlaywright.includes("prepare-full-dictionary"), true);
   assert.equal(setup.includes("cache: maven"), true);
   assert.equal(setup.includes(".runtime/electron-cache"), true);
   assert.equal(workflow.includes(".runtime/electron-builder"), true);

@@ -26,6 +26,8 @@
 - Desktop 等待 Core 启动：macOS/Linux 仍 45 秒；Windows 首次启动为 120 秒，覆盖 Defender 对随包 JRE 与 Jar 的实时扫描，不自动重试。install-smoke 的 Windows 任务保持 Defender 开启，用真实环境验证安装后启动。
 - Windows 上 Core 启动失败把 stderr 落到运行目录文件再读。优先 `javaw`；父进程立刻关掉自己的文件句柄，避免 Windows 上 `close` 永远等不到而把 CI 挂死。`stop` 用进程树有界结束。随包 JRE 补 `javaw.exe`。分类码在中文前缀乱码时仍认固定 `[CODE]`。
 - CI 拆成并行作业：lint 不阻塞；macOS verify / 七日旅程 / 打包三分片；Windows / Ubuntu 的 core-cross 与打包分开；install-smoke 只依赖对应平台安装包。启用 npm / Maven / Electron / electron-builder 缓存。作业超时收紧；门禁脚本超时后打印进程树。
+- Windows PE stub 编进 `.runtime/native`，MSVC/MinGW 的 `.obj` 不落源码树，避免 NSIS 构建把清单判成脏工作区。macOS 打包验收通过 Playwright globalSetup 自行准备 Full 词典。install-smoke 在对应打包作业失败时跳过，不再拉不存在的产物。
+- Windows 上 Core 启动失败分类：退出后再读一次 stderr 文件，删除运行副本允许重试；`stop` 立刻 `taskkill /T` 并拆掉 stdout，避免 javaw 残留把 integration 门禁挂满超时。
 
 ### 边界
 

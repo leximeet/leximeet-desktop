@@ -175,7 +175,7 @@
       "target": "nsis",
       "extraResources": [
         {
-          "from": "resources/native/leximeet-run-as-node.exe",
+          "from": ".runtime/native/leximeet-run-as-node.exe",
           "to": "native/leximeet-run-as-node.exe"
         }
       ]

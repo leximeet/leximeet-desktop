@@ -210,7 +210,13 @@ class JavaRuntime {
         if (!this.stopping) this.lastError = "本地核心已停止，可以重启核心恢复；资料仍保存在本机";
       }
     };
-    const removeRunDir = () => fs.rmSync(runDir, { recursive: true, force: true });
+    const removeRunDir = () => {
+      try {
+        fs.rmSync(runDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 50 });
+      } catch {
+        // Windows 上刚退出的 javaw 可能短暂占用运行副本；诊断已经读走。
+      }
+    };
     child.once("exit", cleanupState);
     child.once("error", () => {
       cleanupState();
@@ -233,9 +239,17 @@ class JavaRuntime {
           finish(new Error("无法启动随包 Java 21，请检查完整安装包与执行权限")),
         );
         child.once("exit", (code) => {
+          const report = (text) => {
+            removeRunDir();
+            finish(new Error(this.stopping ? "Java Core 启动已取消" : startupFailure(text, code)));
+          };
           const text = harvest();
-          removeRunDir();
-          finish(new Error(this.stopping ? "Java Core 启动已取消" : startupFailure(text, code)));
+          if (this.stopping || STARTUP_CODE_PATTERN.test(text) || /Core 启动失败/.test(text)) {
+            report(text);
+            return;
+          }
+          // Windows 上 JVM 退出后文件刷新可能晚于 exit；短暂重试再分类。
+          setTimeout(() => report(harvest()), 80);
         });
         lines.on("line", (line) => {
           let result;
@@ -391,24 +405,36 @@ class JavaRuntime {
     this.generation++;
     this.state = "stopped";
     const child = this.child;
-    if (!child || !child.pid || child.exitCode !== null || child.signalCode !== null) return;
+    const detachStdio = () => {
+      try {
+        child?.stdout?.destroy();
+      } catch {
+        /* 拆掉管道，避免 Node 为已死或将死的子进程一直等 close */
+      }
+    };
+    if (!child || !child.pid || child.exitCode !== null || child.signalCode !== null) {
+      detachStdio();
+      return;
+    }
     await new Promise((resolve) => {
       let settled = false;
       const done = () => {
         if (settled) return;
         settled = true;
+        detachStdio();
         clearTimeout(soft);
         clearTimeout(hard);
         resolve();
       };
-      const soft = setTimeout(() => {
+      const killTree = () => {
         try {
           signalTree(child.pid, "SIGKILL");
         } catch {
           child.kill("SIGKILL");
         }
-      }, 2500);
-      // 有界退出：Windows 上 close/exit 丢失时不能把整个 CI 门禁挂死。
+      };
+      // POSIX 先 SIGTERM；Windows 立刻 taskkill /T /F，避免 javaw 残留挂住测试进程。
+      const soft = setTimeout(killTree, process.platform === "win32" ? 0 : 2500);
       const hard = setTimeout(done, 8000);
       child.once("exit", done);
       child.once("error", done);

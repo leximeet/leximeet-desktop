@@ -57,17 +57,27 @@ function hasExited(child) {
 }
 
 async function stopChild(child) {
-  if (hasExited(child)) return;
-  const closed = once(child, "close").catch(() => {});
-  child.kill("SIGTERM");
-  if (await Promise.race([closed.then(() => true), delay(1500).then(() => false)])) return;
+  if (hasExited(child)) {
+    try {
+      child?.stdout?.destroy();
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  const exited = once(child, "exit").catch(() => {});
+  try {
+    child.stdout?.destroy();
+  } catch {
+    /* ignore */
+  }
   child.kill("SIGKILL");
-  await Promise.race([closed, delay(1500)]);
+  await Promise.race([exited, delay(3000)]);
 }
 
 async function stopRuntime(runtime) {
   const child = runtime.child;
-  const exited = hasExited(child) ? Promise.resolve() : once(child, "close").catch(() => {});
+  const exited = hasExited(child) ? Promise.resolve() : once(child, "exit").catch(() => {});
   await runtime.stop();
   await Promise.race([
     exited,
@@ -208,7 +218,7 @@ test("同目录重复管理器启动失败，不影响已持有目录锁的原�
   const duplicate = fixture(t, { dataDir: first.runtime.dataDir });
   const starting = duplicate.start();
   const child = duplicate.runtime.child;
-  let exitedAt;
+  let exitedAt = hasExited(child) ? Date.now() : undefined;
   child.once("exit", () => {
     exitedAt = Date.now();
   });
