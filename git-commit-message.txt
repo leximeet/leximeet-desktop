@@ -1,4 +1,5 @@
-维护：将 Core gitlink 更新为已公开的 61e7aa3
+修复：按 Codex 审查对齐 MCP stdio 与设置/配置边界
 
-- 指向 leximeet-desktop-core 已推送提交，CI 可递归检出
-- 内容与本地 857e21a 相同，仅 SHA 因补丁重放而不同
+- stdio 改为官方换行分隔 JSON，不再使用 Content-Length
+- 测试连接不要求 clientId
+- Codex TOML 识别数组表，断开只删 leximeet

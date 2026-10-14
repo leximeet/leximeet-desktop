@@ -38,12 +38,20 @@ test("桌面未运行时 initialize 返回 DESKTOP_NOT_RUNNING", async () => {
   shim.close();
 });
 
-test("stdio 帧拒绝超大 Content-Length", async () => {
-  const decoder = new StdioDecoder({ maximum: 64 });
+test("stdio 使用换行分隔的 JSON，拒绝超长行", async () => {
+  const encoded = encodeStdio({ jsonrpc: "2.0", id: 1, method: "ping" });
+  assert.equal(encoded.includes(0x0a), true);
+  assert.doesNotMatch(encoded.toString("utf8"), /Content-Length/);
+  const decoder = new StdioDecoder();
+  const messages = [];
+  decoder.on("message", (message) => messages.push(message));
+  decoder.push(Buffer.from('{"jsonrpc":"2.0","id":3,"method":"ping"}\n', "utf8"));
+  assert.equal(messages[0].id, 3);
+  const limited = new StdioDecoder({ maximum: 16 });
   let failed = "";
-  decoder.on("error", (error) => {
+  limited.on("error", (error) => {
     failed = error.message;
   });
-  decoder.push(Buffer.from("Content-Length: 1000\r\n\r\n{}", "utf8"));
+  limited.push(Buffer.from(`${"x".repeat(32)}\n`, "utf8"));
   assert.equal(failed, "INVALID_FRAME_LENGTH");
 });

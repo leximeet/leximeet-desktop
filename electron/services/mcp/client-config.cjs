@@ -138,7 +138,8 @@ function findTomlTables(source, name) {
   const ranges = [];
   let start = -1;
   const header = new RegExp(`^\\[mcp_servers\\.${name}(?:\\.[^\\]]+)?\\]\\s*$`);
-  const other = /^\[[^\]]+\]\s*$/;
+  // 普通表 [a] 与数组表 [[a]] 都是新表起点，避免把后续用户配置算进 leximeet。
+  const other = /^\s*\[{1,2}[^\]]+\]{1,2}\s*$/;
   for (let i = 0; i <= lines.length; i++) {
     const line = lines[i] || "";
     if (i === lines.length || other.test(line)) {

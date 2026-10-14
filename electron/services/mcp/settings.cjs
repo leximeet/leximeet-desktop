@@ -47,16 +47,18 @@ class AssistantSettings {
         throw new Error("不支持的 AI 助手连接操作");
       return this.state();
     }
+    if (input.action === "test") {
+      if (Object.keys(input).some((key) => key !== "action"))
+        throw new Error("不支持的 AI 助手连接操作");
+      return { ...(await this.state()), test: await this.testConnection() };
+    }
     if (!CLIENTS.includes(input.clientId)) throw new Error("只支持 Cursor、Codex 与 Claude Code");
     if (input.action === "connect") {
       connect(input.clientId, this.options());
       return this.state();
     }
-    if (input.action === "disconnect") {
-      disconnect(input.clientId, this.options());
-      return this.state();
-    }
-    return { ...(await this.state()), test: await this.testConnection() };
+    disconnect(input.clientId, this.options());
+    return this.state();
   }
 
   options() {

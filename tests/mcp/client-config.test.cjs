@@ -92,6 +92,28 @@ test("Codex TOML 保留注释与其他表，只替换 leximeet", (t) => {
   assert.doesNotMatch(after, /mcp_servers\.leximeet/);
 });
 
+test("Codex 断开不删除后续数组表", (t) => {
+  const f = fixture(t);
+  const file = path.join(f.root, ".codex/config.toml");
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(
+    file,
+    [
+      "[mcp_servers.leximeet]",
+      `command = "${f.electron}"`,
+      "",
+      "[[projects]]",
+      'path = "/keep/me"',
+      "",
+    ].join("\n"),
+  );
+  removeCodex(file);
+  const after = fs.readFileSync(file, "utf8");
+  assert.match(after, /\[\[projects\]\]/);
+  assert.match(after, /\/keep\/me/);
+  assert.doesNotMatch(after, /mcp_servers\.leximeet/);
+});
+
 test("Claude Code 写入 user 级 mcpServers 且可干净断开", (t) => {
   const f = fixture(t);
   const file = path.join(f.root, ".claude.json");

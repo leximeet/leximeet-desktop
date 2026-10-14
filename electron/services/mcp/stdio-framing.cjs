@@ -4,11 +4,12 @@ const { TextDecoder } = require("node:util");
 
 const MAX_MESSAGE_BYTES = 256 * 1024;
 
-// 官方 MCP stdio 使用 LSP 风格的 Content-Length；与 LMCP 的 4 字节帧分开。
+// 官方 MCP stdio 以换行分隔 JSON-RPC，消息内不得含裸换行；与 LMCP 的 4 字节帧分开。
 function encodeStdio(value, maximum = MAX_MESSAGE_BYTES) {
-  const body = Buffer.from(JSON.stringify(value), "utf8");
-  if (!body.length || body.length > maximum) throw new Error("PAYLOAD_TOO_LARGE");
-  return Buffer.concat([Buffer.from(`Content-Length: ${body.length}\r\n\r\n`, "ascii"), body]);
+  const text = JSON.stringify(value);
+  if (!text || text.includes("\n") || text.includes("\r") || text.length > maximum)
+    throw new Error("PAYLOAD_TOO_LARGE");
+  return Buffer.from(`${text}\n`, "utf8");
 }
 
 class StdioDecoder extends EventEmitter {
@@ -30,20 +31,17 @@ class StdioDecoder extends EventEmitter {
     }
   }
   parseOne() {
-    const text = this.buffer.toString("ascii");
-    const separator = text.indexOf("\r\n\r\n");
-    if (separator < 0) return false;
-    const headers = text.slice(0, separator);
-    const match = /^Content-Length:\s*(\d+)\s*$/im.exec(headers);
-    if (!match) throw new Error("INVALID_STDIO_HEADER");
-    const size = Number(match[1]);
-    if (!Number.isInteger(size) || size < 1 || size > this.maximum)
-      throw new Error("INVALID_FRAME_LENGTH");
-    const start = separator + 4;
-    if (this.buffer.length < start + size) return false;
-    const body = this.buffer.subarray(start, start + size);
-    this.buffer = this.buffer.subarray(start + size);
-    const source = new TextDecoder("utf-8", { fatal: true }).decode(body);
+    const newline = this.buffer.indexOf(0x0a);
+    if (newline < 0) {
+      if (this.buffer.length > this.maximum) throw new Error("INVALID_FRAME_LENGTH");
+      return false;
+    }
+    let line = this.buffer.subarray(0, newline);
+    this.buffer = this.buffer.subarray(newline + 1);
+    if (line.length && line[line.length - 1] === 0x0d) line = line.subarray(0, line.length - 1);
+    if (!line.length) return true;
+    if (line.length > this.maximum) throw new Error("INVALID_FRAME_LENGTH");
+    const source = new TextDecoder("utf-8", { fatal: true }).decode(line);
     this.emit("message", JSON.parse(source));
     return true;
   }
