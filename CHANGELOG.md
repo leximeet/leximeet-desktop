@@ -22,7 +22,7 @@
 - 隔离目录回收在 Windows 上检查 NTFS ACL（拒绝 Everyone / Users / Authenticated Users），不再把缺少 POSIX 0o077 当成放行。
 - 停止本轮进程在 Windows 用 `taskkill /T`、macOS 按 PID 与子进程、Linux 仍用进程组；各平台都有「停止后子进程确实退出」的真实进程测试。
 - NTFS 收紧时目录用 `(OI)(CI)(F)`、文件只用 `(F)`，避免私有 JSON 写失败。Linux 的 `packageName` 放到 `deb`，符合 electron-builder 26 的 schema。
-- Linux `.deb` 补 `linux.maintainer` 与项目主页，满足 electron-builder FpmTarget；不把缺少作者邮箱当成可跳过。Windows CI 仅在 core-cross 单元/Core 测试中把工作区、TEMP 与 `java.exe` 排除出 Defender，不改 Core 的 15 秒产品预算。
+- Linux `.deb` 补 `linux.maintainer` 与项目主页，满足 electron-builder FpmTarget；不把缺少作者邮箱当成可跳过。Windows CI 仅在 core-cross 单元/Core 测试中把工作区、TEMP 与 `java.exe` 排除出 Defender，并用 `TEMP` 把 JUnit 临时目录放到工作区内；不注入 `JAVA_TOOL_OPTIONS`。不改 Core 的 15 秒产品预算。
 - Desktop 等待 Core 启动：macOS/Linux 仍 45 秒；Windows 首次启动为 120 秒，覆盖 Defender 对随包 JRE 与 Jar 的实时扫描，不自动重试。install-smoke 的 Windows 任务保持 Defender 开启，用真实环境验证安装后启动。
 
 ### 边界

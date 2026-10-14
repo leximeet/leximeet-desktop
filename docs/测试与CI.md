@@ -72,7 +72,7 @@ Windows / Linux 仍使用隐藏窗口、静音、受控输入和资源隔离，�
 | visual.yml         | 手动运行当前真实原生使用链路及明暗/窄窗截图，供人工审查；不宣称像素比较通过                                                                                                                                                                  |
 | candidate.yml      | 三端矩阵构建全部安装包（mac dmg/zip、win nsis、linux AppImage+deb），真实安装验证与对应源码；三端齐套后合并 feed / SHA256SUMS 再公开 Release                                                                                                 |
 
-`ci.yml` 的 desktop 作业预算为 120 分钟（Windows 打包与 Maven 更慢，75 分钟会在 core-cross 中途被取消）；L2 安装冒烟另起干净 runner，预算 30 分钟。`install-smoke` 使用 `if: ${{ !cancelled() }}`，以便矩阵名展开，并在个别 desktop 作业失败时仍尝试已上传的安装包。Windows **core-cross** 在 Core 单元测试前把工作区、TEMP 与 `java.exe` 加入 Defender 排除，并把 `java.io.tmpdir` 指到工作区内的 `.runtime/ci-tmp`，避免实时扫描把冷词典复制拖过 Core 的 15 秒产品预算；不修改 Core 源码或放宽该预算。**install-smoke 的 Windows 任务不排除 Defender**，并确认实时保护开启，用真实环境验证安装后首次启动。产品侧 Desktop 等待 Core 握手：POSIX 45 秒，Windows 120 秒。业务请求的 15 秒预算、单例断言和零重试策略保持不变；作业预算不代表实测耗时或远端检查已经通过。
+`ci.yml` 的 desktop 作业预算为 120 分钟（Windows 打包与 Maven 更慢，75 分钟会在 core-cross 中途被取消）；L2 安装冒烟另起干净 runner，预算 30 分钟。`install-smoke` 使用 `if: ${{ !cancelled() }}`，以便矩阵名展开，并在个别 desktop 作业失败时仍尝试已上传的安装包。Windows **core-cross** 在 Core 单元测试前把工作区、TEMP 与 `java.exe` 加入 Defender 排除，并把 `TEMP`/`TMP` 指到工作区内的 `.runtime/ci-tmp`，避免实时扫描把冷词典复制拖过 Core 的 15 秒产品预算；不注入 `JAVA_TOOL_OPTIONS`（JVM 会把该变量打到 stderr，破坏 Core 启动诊断单行断言）。不修改 Core 源码或放宽该预算。**install-smoke 的 Windows 任务不排除 Defender**，并确认实时保护开启，用真实环境验证安装后首次启动。产品侧 Desktop 等待 Core 握手：POSIX 45 秒，Windows 120 秒。业务请求的 15 秒预算、单例断言和零重试策略保持不变；作业预算不代表实测耗时或远端检查已经通过。
 
 Core 子模块单元测试在临时空仓中让 Git 解析相对来源，覆盖 GitHub / Gitee 的 HTTPS 与 SSH 地址；随后从本地 Core 检出固定 gitlink 并核对源码。解析检查不访问网络，也不改开发者的远端或全局配置；远端是否能取得该提交仍由实际递归检出验证。
 

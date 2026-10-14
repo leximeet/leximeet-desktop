@@ -96,17 +96,9 @@ jobs:
         run: |
           $tmp = Join-Path "${{ github.workspace }}" ".runtime/ci-tmp"
           New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-          $javaTmp = ($tmp -replace '\\', '/')
-          $existing = [Environment]::GetEnvironmentVariable("JAVA_TOOL_OPTIONS", "Process")
-          $javaOptions = if ([string]::IsNullOrWhiteSpace($existing)) {
-            "-Djava.io.tmpdir=$javaTmp"
-          } else {
-            "$existing -Djava.io.tmpdir=$javaTmp"
-          }
           echo "TMP=$tmp" >> $env:GITHUB_ENV
           echo "TEMP=$tmp" >> $env:GITHUB_ENV
           echo "TMPDIR=$tmp" >> $env:GITHUB_ENV
-          echo "JAVA_TOOL_OPTIONS=$javaOptions" >> $env:GITHUB_ENV
           $paths = @("${{ github.workspace }}", "${{ runner.temp }}", $tmp)
           foreach ($path in ($paths | Select-Object -Unique)) {
             if ($path) {
