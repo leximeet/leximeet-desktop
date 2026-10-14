@@ -24,7 +24,7 @@
 - NTFS 收紧时目录用 `(OI)(CI)(F)`、文件只用 `(F)`，避免私有 JSON 写失败。Linux 的 `packageName` 放到 `deb`，符合 electron-builder 26 的 schema。
 - Linux `.deb` 补 `linux.maintainer` 与项目主页，满足 electron-builder FpmTarget；不把缺少作者邮箱当成可跳过。Windows CI 仅在 core-cross 单元/Core 测试中把工作区、TEMP 与 `java.exe` 排除出 Defender，并用 `TEMP` 把 JUnit 临时目录放到工作区内；不注入 `JAVA_TOOL_OPTIONS`。不改 Core 的 15 秒产品预算。
 - Desktop 等待 Core 启动：macOS/Linux 仍 45 秒；Windows 首次启动为 120 秒，覆盖 Defender 对随包 JRE 与 Jar 的实时扫描，不自动重试。install-smoke 的 Windows 任务保持 Defender 开启，用真实环境验证安装后启动。
-- Windows 上 Core 启动失败等 stdio `close` 后再读 stderr，避免 `exit` 早于管道排空把 `DATA_IN_USE` 误报成通用退出码。
+- Windows 上 Core 启动失败把 stderr 落到运行目录文件再读（与 Core 自身测试相同），避免 `System.exit` 丢掉管道里的 `DATA_IN_USE`。
 
 ### 边界
 

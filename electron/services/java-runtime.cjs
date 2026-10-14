@@ -34,7 +34,7 @@ function startupFailure(stderr, exitCode) {
     : `本机核心无法启动（退出码 ${Number.isInteger(exitCode) ? exitCode : "未知"}）；请检查完整安装包，资料仍保存在本机`;
 }
 
-/** 收集子进程 stderr；Windows 上须等 close 才能读完，exit 时管道可能尚未排空。 */
+/** 管道在 Windows 上可能随 System.exit 被丢弃；文件句柄与 Core 自己的测试一致。 */
 function attachStderr(child, { limit = 4000 } = {}) {
   let diagnostic = "";
   if (child.stderr) {
@@ -44,6 +44,27 @@ function attachStderr(child, { limit = 4000 } = {}) {
     });
   }
   return () => diagnostic;
+}
+
+function readLogTail(file, limit = 4000) {
+  try {
+    return fs.readFileSync(file, "utf8").slice(-limit);
+  } catch {
+    return "";
+  }
+}
+
+function spawnJava(java, args, env, stderrFile) {
+  const stderrFd = fs.openSync(stderrFile, "w", 0o600);
+  try {
+    return spawn(java, args, {
+      stdio: ["ignore", "pipe", stderrFd],
+      windowsHide: true,
+      env,
+    });
+  } finally {
+    fs.closeSync(stderrFd);
+  }
 }
 
 function javaExecutable(env = process.env) {
@@ -141,24 +162,29 @@ class JavaRuntime {
       if (!args.includes("--profile")) args.push("--profile", "test");
       args.push("--test-clock-file", this.testClockFile);
     }
-    const child = spawn(this.java, args, {
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
-      env: coreEnvironment(),
-    });
+    const stderrFile = path.join(runDir, "stderr.log");
+    const child = spawnJava(this.java, args, coreEnvironment(), stderrFile);
     this.child = child;
-    const readDiagnostic = attachStderr(child);
-    const cleanup = () => {
+    let diagnostic = "";
+    const harvest = () => {
+      const text = readLogTail(stderrFile);
+      if (text) diagnostic = text;
+      return diagnostic;
+    };
+    const cleanupState = () => {
+      harvest();
       if (this.child === child) {
         this.port = null;
         this.state = this.stopping ? "stopped" : "failed";
         if (!this.stopping) this.lastError = "本地核心已停止，可以重启核心恢复；资料仍保存在本机";
       }
-      // 只回收本次创建的运行副本，数据库、备份和用户资料从不由此清理。
-      fs.rmSync(runDir, { recursive: true, force: true });
     };
-    child.once("exit", cleanup);
-    child.once("error", cleanup);
+    const removeRunDir = () => fs.rmSync(runDir, { recursive: true, force: true });
+    child.once("exit", cleanupState);
+    child.once("error", () => {
+      cleanupState();
+      removeRunDir();
+    });
     try {
       await new Promise((resolve, reject) => {
         const lines = readline.createInterface({ input: child.stdout });
@@ -175,13 +201,12 @@ class JavaRuntime {
         child.once("error", () =>
           finish(new Error("无法启动随包 Java 21，请检查完整安装包与执行权限")),
         );
-        child.once("close", (code) =>
-          finish(
-            new Error(
-              this.stopping ? "Java Core 启动已取消" : startupFailure(readDiagnostic(), code),
-            ),
-          ),
-        );
+        child.once("close", (code) => {
+          const text = harvest();
+          // 等 close 再删运行目录，让 Windows 把 System.exit 前的 stderr 刷进文件。
+          removeRunDir();
+          finish(new Error(this.stopping ? "Java Core 启动已取消" : startupFailure(text, code)));
+        });
         lines.on("line", (line) => {
           let result;
           try {
@@ -370,4 +395,6 @@ module.exports = {
   startupFailure,
   coreStartTimeoutMs,
   attachStderr,
+  readLogTail,
+  spawnJava,
 };

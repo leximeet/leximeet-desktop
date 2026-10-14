@@ -1,11 +1,16 @@
 "use strict";
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 const { spawn } = require("node:child_process");
 const {
   coreEnvironment,
   startupFailure,
   attachStderr,
+  readLogTail,
+  spawnJava,
 } = require("../../electron/services/java-runtime.cjs");
 
 test("Java 注入参数不传给子进程，原环境保持不变", () => {
@@ -52,4 +57,22 @@ test("等 close 再读 stderr，DATA_IN_USE 不会被误报成通用退出码", 
   assert.equal(code, 1);
   assert.match(startupFailure(readDiagnostic(), code), /DATA_IN_USE/);
   assert.match(startupFailure(readDiagnostic(), code), /另一应用使用/);
+});
+
+test("stderr 接到文件后，进程退出仍能读到 DATA_IN_USE", async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "leximeet-stderr-file-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const stderrFile = path.join(root, "stderr.log");
+  const child = spawnJava(
+    process.execPath,
+    ["-e", "process.stderr.write('Core 启动失败：[DATA_IN_USE] locked\\n'); process.exit(1);"],
+    process.env,
+    stderrFile,
+  );
+  const code = await new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", resolve);
+  });
+  assert.equal(code, 1);
+  assert.match(startupFailure(readLogTail(stderrFile), code), /DATA_IN_USE/);
 });
