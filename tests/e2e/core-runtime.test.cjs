@@ -7,7 +7,10 @@ const { once } = require("node:events");
 const net = require("node:net");
 const { setTimeout: delay } = require("node:timers/promises");
 const { JavaRuntime } = require("../../electron/services/java-runtime.cjs");
-const { pidAlive } = require("../../electron/services/platform/process-tree.cjs");
+const {
+  pidAlive,
+  signalOwnedByMarker,
+} = require("../../electron/services/platform/process-tree.cjs");
 
 const projectDir = path.resolve(__dirname, "../..");
 const builtJar = path.join(projectDir, "core-java/target/leximeet-core.jar");
@@ -46,8 +49,13 @@ function fixture(t, { jarPath = builtJar, Runtime = JavaRuntime, ...options } = 
       await runtime.stop();
     } finally {
       for (const child of children) await stopChild(child);
+      try {
+        signalOwnedByMarker(directory);
+      } catch {
+        /* Windows 上按资料目录再收一次，避免残留 JVM 占住目录 */
+      }
       // 仅删除本用例通过 mkdtemp 创建的目录，不接触正式用户目录。
-      fs.rmSync(directory, { recursive: true, force: true });
+      fs.rmSync(directory, { recursive: true, force: true, maxRetries: 8, retryDelay: 50 });
     }
   });
   return { runtime, directory, children, remember, start };

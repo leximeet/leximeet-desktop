@@ -7,6 +7,8 @@ const {
   pidAlive,
   treeAlive,
   signalTree,
+  listPidsByCommandLine,
+  signalOwnedByMarker,
 } = require("../../electron/services/platform/process-tree.cjs");
 
 const TREE_SCRIPT =
@@ -57,4 +59,36 @@ test("停止后本轮子进程确实退出", async (t) => {
   assert.equal(pidAlive(parent.pid), false);
   assert.equal(pidAlive(childPid), false);
   assert.equal(treeAlive(parent.pid), false);
+});
+
+test("按命令行标记回收只在 Windows 生效，其它平台为空操作", async (t) => {
+  if (process.platform !== "win32") {
+    assert.deepEqual(listPidsByCommandLine("leximeet-unused-marker"), []);
+    assert.doesNotThrow(() => signalOwnedByMarker("leximeet-unused-marker"));
+    return;
+  }
+  const marker = `leximeet-owned-${Date.now()}-${process.pid}`;
+  const child = spawn(
+    process.execPath,
+    ["-e", `process.argv.push(${JSON.stringify(marker)}); setInterval(()=>{}, 1000)`],
+    {
+      stdio: "ignore",
+      windowsHide: true,
+    },
+  );
+  t.after(() => {
+    try {
+      signalTree(child.pid, "SIGKILL");
+    } catch {
+      /* 标记回收后可能已退出 */
+    }
+  });
+  const deadline = Date.now() + 8000;
+  while (!listPidsByCommandLine(marker).includes(child.pid) && Date.now() < deadline)
+    await delay(50);
+  assert.equal(listPidsByCommandLine(marker).includes(child.pid), true);
+  signalOwnedByMarker(marker);
+  const gone = Date.now() + 4000;
+  while (pidAlive(child.pid) && Date.now() < gone) await delay(50);
+  assert.equal(pidAlive(child.pid), false);
 });

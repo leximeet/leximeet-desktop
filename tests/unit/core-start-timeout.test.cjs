@@ -21,7 +21,12 @@ test("安装冒烟等待长于产品握手，Windows 仍不短于 POSIX 冒烟�
 
 test("Windows 安装冒烟给 Electron 加 --disable-gpu，避免无显示 runner 挂住", () => {
   assert.deepEqual(appLaunchArgs([], "linux"), []);
-  assert.ok(appLaunchArgs([], "win32").includes("--disable-gpu"));
+  assert.deepEqual(appLaunchArgs([], "win32"), ["--disable-gpu"]);
+  assert.equal(
+    appLaunchArgs([], "win32").includes("--disable-software-rasterizer"),
+    false,
+    "关掉软件光栅会让无 GPU runner 直接崩溃",
+  );
   assert.ok(
     appLaunchArgs(["--appimage-extract-and-run"], "linux").includes("--appimage-extract-and-run"),
   );

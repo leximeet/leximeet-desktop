@@ -14,10 +14,13 @@ const {
 } = require("../electron/services/text-dictionary-index.cjs");
 const root = path.resolve(__dirname, "..");
 
-async function download(url, destination) {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function downloadOnce(url, destination) {
   const temporary = `${destination}.download`;
   try {
-    if (!url.startsWith("https://")) throw new Error("词典下载只接受 HTTPS");
     let received = false;
     for (const proxy of [null, "http://127.0.0.1:7897", "http://127.0.0.1:12334"]) {
       // Node 原生 fetch 不自动使用用户的代理变量；curl 提供一致的直连与代理回退。
@@ -50,6 +53,24 @@ async function download(url, destination) {
   } finally {
     fs.rmSync(temporary, { force: true });
   }
+}
+
+async function download(url, destination, { attempts = 3 } = {}) {
+  if (!url.startsWith("https://")) throw new Error("词典下载只接受 HTTPS");
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      await downloadOnce(url, destination);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) {
+        console.warn(`词典下载第 ${attempt} 次失败，准备重试：${error.message}`);
+        await sleep(1500 * attempt);
+      }
+    }
+  }
+  throw lastError;
 }
 async function prepareSource(edition = "core-text") {
   const local =

@@ -20,6 +20,7 @@ function nativeFixture(
   const app = Object.assign(new EventEmitter(), {
     setActivationPolicy: (value) => calls.push(["policy", value]),
     commandLine: { appendSwitch: (value) => calls.push(["switch", value]) },
+    disableHardwareAcceleration: () => calls.push(["disable-hw"]),
     focus: () => calls.push(["app.focus"]),
     show: () => calls.push(["app.show"]),
     dock: { show: async () => calls.push(["dock.show"]) },
@@ -143,6 +144,36 @@ test("Finder、系统设置和文件选择框误调用明确报错，没有伪�
   ])
     assert.throws(run, /后台自动测试禁止/);
   assert.equal(f.calls.length, 2);
+});
+test("showErrorBox 只记录不抛，避免 Electron 异常处理器二次崩溃", () => {
+  const dialog = {
+    showErrorBox() {
+      throw new Error("原生 showErrorBox 不该被调用");
+    },
+  };
+  const app = Object.assign(new EventEmitter(), {
+    setActivationPolicy() {},
+    commandLine: { appendSwitch() {} },
+    disableHardwareAcceleration() {},
+  });
+  const guard = installBackgroundTest({
+    app,
+    shell: {},
+    dialog,
+    env: { LEXIMEET_PROFILE: "test", LEXIMEET_TEST_SILENT: "1" },
+    platform: "linux",
+  });
+  assert.doesNotThrow(() => dialog.showErrorBox("启动失败", "本机核心无法启动"));
+  assert.equal(guard.snapshot().blocked["host.showErrorBox"], 1);
+  assert.equal(
+    guard.snapshot().violations.some((item) => item.kind === "showErrorBox"),
+    true,
+  );
+});
+test("Windows 后台测试关闭硬件加速，保留软件光栅", () => {
+  const f = nativeFixture(undefined, "win32");
+  assert.deepEqual(f.calls, [["disable-hw"], ["switch", "disable-gpu"], ["switch", "mute-audio"]]);
+  assert.equal(f.guard.snapshot().activationPolicy, null);
 });
 test("非 macOS 保留窗口保护和静音，不调用 macOS 激活策略", () => {
   const f = nativeFixture(undefined, "linux");

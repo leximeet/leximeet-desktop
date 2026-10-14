@@ -36,8 +36,8 @@ function run(command, args, options = {}) {
 
 function appLaunchArgs(kindArgs, platform = process.platform) {
   const args = [...(kindArgs || [])];
-  // GitHub windows runner 无可用 GPU，Electron 会在就绪前挂住，描述符永远不出现。
-  if (platform === "win32") args.push("--disable-gpu", "--disable-software-rasterizer");
+  // 无显示 Windows runner 会在 GPU 初始化挂住；只关 GPU，保留软件光栅，否则窗口创建崩溃。
+  if (platform === "win32") args.push("--disable-gpu");
   return args;
 }
 
@@ -178,14 +178,22 @@ async function main() {
   fs.closeSync(stderrFd);
   let failed = "";
   try {
-    const descriptor = await waitFor(
-      () => {
-        const file = path.join(profileDir, "mcp", "mcp-uds.json");
-        return fs.existsSync(file) ? file : "";
-      },
-      descriptorWaitMs(),
-      "Core / MCP 描述符",
-    );
+    const died = new Promise((_, reject) => {
+      child.once("exit", (code, signal) => {
+        reject(new Error(`应用已退出 code=${code} signal=${signal}`));
+      });
+    });
+    const descriptor = await Promise.race([
+      waitFor(
+        () => {
+          const file = path.join(profileDir, "mcp", "mcp-uds.json");
+          return fs.existsSync(file) ? file : "";
+        },
+        descriptorWaitMs(),
+        "Core / MCP 描述符",
+      ),
+      died,
+    ]);
     const healthLog = path.join(profileDir, "logs");
     if (!fs.existsSync(healthLog)) fs.mkdirSync(healthLog, { recursive: true });
     const home = childEnv.HOME || childEnv.USERPROFILE || os.homedir();

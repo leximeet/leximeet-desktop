@@ -5,7 +5,7 @@ const { randomBytes } = require("node:crypto");
 const readline = require("node:readline");
 const { Readable, Transform } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
-const { signalTree, pidAlive } = require("./platform/process-tree.cjs");
+const { signalTree, pidAlive, signalOwnedByMarker } = require("./platform/process-tree.cjs");
 
 const MAX_ARCHIVE_BYTES = 2 * 1024 * 1024 * 1024;
 const STARTUP_MESSAGES = Object.freeze({
@@ -401,7 +401,7 @@ class JavaRuntime {
       }
     };
     detachStdio();
-    // Node 的 exitCode 在 Windows 上可能已置位，但 java.exe 仍活着；按 PID 再确认一次。
+    // Node 的 exitCode 在 Windows 上可能已置位，但真正持锁的 java.exe 可能是另一个 PID。
     if (Number.isInteger(pid) && pidAlive(pid)) {
       try {
         signalTree(pid, "SIGKILL");
@@ -411,6 +411,13 @@ class JavaRuntime {
         } catch {
           /* ignore */
         }
+      }
+    }
+    if (this.dataDir) {
+      try {
+        signalOwnedByMarker(this.dataDir);
+      } catch {
+        /* 按资料目录回收失败时仍走下面的 PID 等待 */
       }
     }
     if (!child || !pid || child.exitCode !== null || child.signalCode !== null) return;
