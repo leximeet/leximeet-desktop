@@ -44,6 +44,8 @@ async function fixture(t) {
     "node_modules/electron/dist/LICENSES.chromium.html": "Chromium 原声明 fixture\n",
     ".runtime/jre/legal/java.base/LICENSE": "JRE 原许可 fixture\n",
     "electron/native-host/main.cjs": "main fixture",
+    "electron/mcp-host/main.cjs": "mcp host fixture",
+    "electron/services/mcp/stdio-framing.cjs": "mcp stdio fixture",
     "electron/services/lmcp/framing.cjs": "framing fixture",
     "electron/services/lmcp/private-files.cjs": "private fixture",
     "frontend/dist/index.html": "本轮正式前端 fixture",
@@ -84,6 +86,24 @@ async function fixture(t) {
       files: hostFiles,
     }),
   );
+  const mcpFiles = [
+    ["host/main.cjs", "electron/mcp-host/main.cjs"],
+    ["services/mcp/stdio-framing.cjs", "electron/services/mcp/stdio-framing.cjs"],
+    ["services/lmcp/framing.cjs", "electron/services/lmcp/framing.cjs"],
+    ["services/lmcp/private-files.cjs", "electron/services/lmcp/private-files.cjs"],
+  ].map(([file, source]) => {
+    put(resourcesDir, `mcp-host/${file}`, sources[source]);
+    return { path: file, sha256: hash(sources[source]) };
+  });
+  put(
+    resourcesDir,
+    "mcp-host/bundle.json",
+    JSON.stringify({
+      format: "leximeet.mcp-host-bundle/1",
+      entry: "host/main.cjs",
+      files: mcpFiles,
+    }),
+  );
   return { owned, projectDir, resourcesDir, put };
 }
 
@@ -93,7 +113,7 @@ test("实际包原文和来源一致，门禁只读且报告不含本机路径",
   const before = hash(fs.readFileSync(archive));
   const report = verifyPackageMaterials(f);
   assert.equal(report.status, "passed");
-  assert.equal(report.checkedFiles, 21);
+  assert.equal(report.checkedFiles, 27);
   assert.equal(hash(fs.readFileSync(archive)), before);
   assert.equal(JSON.stringify(report).includes(f.owned), false);
   assert.equal(report.runtimeDependencyBoundary.status, "passed");
@@ -165,11 +185,17 @@ test("Jar 或 Native Host 清单与真实文件不同拒绝放行", async (t) =>
     "core/leximeet-core.jar",
     fs.readFileSync(path.join(f.projectDir, "core-java/target/leximeet-core.jar")),
   );
-  const manifest = JSON.parse(
-    fs.readFileSync(path.join(f.resourcesDir, "native-host/bundle.json")),
-  );
+  const hostBundle = fs.readFileSync(path.join(f.resourcesDir, "native-host/bundle.json"));
+  const manifest = JSON.parse(hostBundle);
   manifest.files[0].sha256 = "0".repeat(64);
   f.put(f.resourcesDir, "native-host/bundle.json", JSON.stringify(manifest));
+  assert.throws(() => verifyPackageMaterials(f), /清单摘要不一致/);
+  f.put(f.resourcesDir, "native-host/bundle.json", hostBundle);
+  const mcpManifest = JSON.parse(
+    fs.readFileSync(path.join(f.resourcesDir, "mcp-host/bundle.json")),
+  );
+  mcpManifest.files[0].sha256 = "0".repeat(64);
+  f.put(f.resourcesDir, "mcp-host/bundle.json", JSON.stringify(mcpManifest));
   assert.throws(() => verifyPackageMaterials(f), /清单摘要不一致/);
 });
 

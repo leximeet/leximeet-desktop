@@ -19,6 +19,7 @@ const names = [
   "diagnostics",
   "desktopAction",
   "connectionSettings",
+  "assistantSettings",
 ];
 const api = Object.fromEntries(
   names.map((name) => [

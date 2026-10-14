@@ -1,0 +1,26 @@
+{
+  "protocolVersion": "2025-06-18",
+  "serverInfo": {
+    "name": "leximeet",
+    "title": "词遇",
+    "version": "1.0.1"
+  },
+  "tools": [
+    {
+      "name": "leximeet_help",
+      "annotations": { "readOnlyHint": true }
+    },
+    {
+      "name": "leximeet_describe",
+      "annotations": { "readOnlyHint": true }
+    },
+    {
+      "name": "leximeet_query",
+      "annotations": { "readOnlyHint": true }
+    },
+    {
+      "name": "leximeet_write",
+      "annotations": { "readOnlyHint": false }
+    }
+  ]
+}

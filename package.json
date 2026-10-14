@@ -1,6 +1,6 @@
 {
   "name": "leximeet-desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "词遇-LexiMeet：在语境里遇见，在记忆里重逢。",
   "private": true,
   "license": "AGPL-3.0-only",
@@ -52,7 +52,10 @@
     "test:desktop": "playwright test --config playwright.desktop.config.cjs",
     "test:package:desktop": "playwright test --config playwright.desktop-package.config.cjs",
     "test:lmcp:transport": "node --test --test-concurrency=1 tests/lmcp/transport-*.test.cjs",
+    "test:mcp": "node --test --test-concurrency=1 tests/mcp/*.test.cjs",
     "verify:lmcp:contract": "node scripts/lmcp/verify-contract.cjs",
+    "verify:mcp:contract": "node scripts/mcp/verify-contract.cjs",
+    "build:mcp-host": "node scripts/mcp/build-host.cjs",
     "accept:connected": "node scripts/accept-connected.cjs",
     "test:connected": "node tests/connected/run-browser.cjs",
     "test:lmcp:e2e": "npm run test:connected",
@@ -69,6 +72,7 @@
     "ws": "8.22.0"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.25.1",
     "@playwright/test": "1.63.0",
     "@vitejs/plugin-vue": "6.0.9",
     "electron": "44.3.0",
@@ -140,6 +144,10 @@
       {
         "from": ".runtime/lmcp-host",
         "to": "native-host"
+      },
+      {
+        "from": ".runtime/mcp-host",
+        "to": "mcp-host"
       }
     ],
     "mac": {

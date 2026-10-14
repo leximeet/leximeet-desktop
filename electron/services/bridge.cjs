@@ -18,6 +18,7 @@ const METHODS = Object.freeze([
   "diagnostics",
   "desktopAction",
   "connectionSettings",
+  "assistantSettings",
 ]);
 function safeExternalUrl(value) {
   if (typeof value !== "string" || value.length > 4096) throw new Error("无效来源链接");
@@ -186,6 +187,9 @@ function createBridge({
     },
     connectionSettings: () => {
       throw new Error("插件连接设置需要原生桌面环境");
+    },
+    assistantSettings: () => {
+      throw new Error("AI 助手连接需要原生桌面环境");
     },
   };
   for (const method of METHODS) {

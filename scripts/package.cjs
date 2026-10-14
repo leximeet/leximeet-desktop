@@ -38,6 +38,7 @@ async function main() {
   require("./lmcp/verify-contract.cjs").verifyContract();
   buildRuntime();
   require("./lmcp/build-host.cjs").buildNativeHost();
+  require("./mcp/build-host.cjs").buildMcpHost();
   const platform = Platform.current();
   const target =
     mode === "dir"

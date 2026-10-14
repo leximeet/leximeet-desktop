@@ -223,6 +223,27 @@ function mainFixture(t, options = {}) {
         }
       },
     },
+    "./services/mcp/gateway.cjs": {
+      McpGateway: class {
+        async start() {}
+        async close() {}
+        status() {
+          return { running: false, lastError: null };
+        }
+      },
+    },
+    "./services/mcp/settings.cjs": {
+      AssistantSettings: class {
+        action() {
+          return Promise.resolve({ clients: [] });
+        }
+      },
+    },
+    "./services/mcp/client-config.cjs": {
+      ensureLauncher() {
+        return "/tmp/leximeet-mcp";
+      },
+    },
     "./services/connection-settings.cjs": {
       ConnectionSettings: class {
         action() {
