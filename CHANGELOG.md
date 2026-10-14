@@ -28,7 +28,7 @@
 - CI 拆成并行作业：lint 不阻塞；macOS verify / 七日旅程 / 打包三分片；Windows / Ubuntu 的 core-cross 与打包分开；install-smoke 只依赖对应平台安装包。启用 npm / Maven / Electron / electron-builder 缓存。作业超时收紧；门禁脚本超时后打印进程树。
 - Windows PE stub 编进 `.runtime/native`，MSVC/MinGW 的 `.obj` 不落源码树，避免 NSIS 构建把清单判成脏工作区。macOS 打包验收通过 Playwright globalSetup 自行准备 Full 词典。install-smoke 在对应打包作业失败时跳过，不再拉不存在的产物。
 - Windows 上 Core 启动失败分类：退出后再读一次 stderr 文件，删除运行副本允许重试；`stop` 按 PID 确认仍存活再 `taskkill /T`，并拆掉 stdout。不用 `javaw`——它会脱离父进程，既丢 System.err 又杀不掉 JVM；改为 `java.exe` + `windowsHide` + 文件 stderr，对齐 Core 自己的进程测试。Windows 安装冒烟给 Electron 加 `--disable-gpu`，失败时打印资料目录与应用 stderr。
-- Windows `stop` 除 PID 外按 `--data-dir` 命令行回收仍持锁的 JVM，避免 Node 跟踪的 PID 对不上而留下 java.exe、挂住 `test:integration`。命令行查询的 PowerShell 用分号分隔赋值，并走 EncodedCommand；CIM 先按 `java.exe`/`javaw.exe`/`node.exe` 缩小。JVM 增加 `-Dleximeet.instance` 供回收。`DATA_IN_USE` 等未占住目录的启动失败只按实例标记回收，不误杀同目录持锁进程。残留子进程超时后 `unref`，避免测试 runner 被句柄拖死。命名管道 Win32 ACL 收紧失败时沿用 Node `readableAll/writableAll=false` 的独占 DACL，不拆掉已监听管道。外置 Host 白名单补 `powershell.cjs`。安装冒烟只加 `--disable-gpu`、保留软件光栅；后台测试的 `showErrorBox` 只记录不抛。隔离冒烟先创建 `AppData\\Roaming`/`Local`。词典下载失败会重试。
+- Windows `stop` 除 PID 外按 `--data-dir` 命令行回收仍持锁的 JVM，避免 Node 跟踪的 PID 对不上而留下 java.exe、挂住 `test:integration`。命令行查询的 PowerShell 用分号分隔赋值，并走 EncodedCommand；CIM 先按 `java.exe`/`javaw.exe`/`node.exe` 缩小。JVM 增加 `-Dleximeet.instance` 供回收。`DATA_IN_USE` 等未占住目录的启动失败只按实例标记回收，不误杀同目录持锁进程。残留子进程超时后 `unref`，避免测试 runner 被句柄拖死。集成测试清理遇到 `EPERM` 不当成失败。Windows 冷启动探测 Maven/JDK 21 超时加宽并重试。命名管道 Win32 ACL 收紧失败时沿用 Node `readableAll/writableAll=false` 的独占 DACL，不拆掉已监听管道。外置 Host 白名单补 `powershell.cjs`。安装冒烟只加 `--disable-gpu`、保留软件光栅；后台测试的 `showErrorBox` 只记录不抛。隔离冒烟先创建 `AppData\\Roaming`/`Local`。词典下载失败会重试。
 
 ### 边界
 

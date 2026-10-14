@@ -57,22 +57,30 @@ function fixture(t, { jarPath = builtJar, Runtime = JavaRuntime, ...options } = 
       } catch {
         /* Windows 上按资料目录/实例标记再收一次 */
       }
-      if (process.platform === "win32") {
-        try {
-          execFileSync("taskkill", ["/F", "/IM", "java.exe", "/T"], {
-            windowsHide: true,
-            timeout: 15000,
-          });
-        } catch {
-          /* 本文件串行且独占 java；没有残留时 taskkill 返回非 0 */
-        }
+      await delay(process.platform === "win32" ? 150 : 0);
+      try {
+        // 仅删除本用例通过 mkdtemp 创建的目录，不接触正式用户目录。
+        fs.rmSync(directory, { recursive: true, force: true, maxRetries: 24, retryDelay: 100 });
+      } catch (error) {
+        if (!["EPERM", "EBUSY", "ENOENT"].includes(error.code)) throw error;
+        /* Windows 刚结束的 JVM 可能短暂占住临时目录，不把清理失败当成用例失败 */
       }
-      // 仅删除本用例通过 mkdtemp 创建的目录，不接触正式用户目录。
-      fs.rmSync(directory, { recursive: true, force: true, maxRetries: 8, retryDelay: 50 });
     }
   });
   return { runtime, directory, children, remember, start };
 }
+
+test.after(() => {
+  if (process.platform !== "win32") return;
+  try {
+    execFileSync("taskkill", ["/F", "/IM", "java.exe", "/T"], {
+      windowsHide: true,
+      timeout: 15000,
+    });
+  } catch {
+    /* 整份套件结束后再清残留；没有 java 时 taskkill 非 0 */
+  }
+});
 
 function hasExited(child) {
   return !child || child.exitCode !== null || child.signalCode !== null;
