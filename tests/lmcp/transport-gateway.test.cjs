@@ -9,11 +9,13 @@ const { randomUUID } = require("node:crypto");
 const { LmcpGateway } = require("../../electron/services/lmcp/gateway.cjs");
 const { FrameDecoder, encodeFrame } = require("../../electron/services/lmcp/framing.cjs");
 const { readPrivateJson } = require("../../electron/services/lmcp/private-files.cjs");
+const { ensurePrivateDirectory } = require("../../electron/services/platform/private-files.cjs");
 const origin = `chrome-extension://${"a".repeat(32)}/`;
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 async function fixture(t, options) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "lmcp-gateway-test-"));
+  ensurePrivateDirectory(root);
   const gateway = new LmcpGateway({
     profile: { root, name: "test" },
     allowedOrigins: [origin],
@@ -28,7 +30,7 @@ async function fixture(t, options) {
   await gateway.start();
   const descriptor = readPrivateJson(gateway.descriptorPath);
   async function client(connectionId = randomUUID()) {
-    const socket = net.connect(descriptor.socketPath);
+    const socket = net.connect(descriptor.path || descriptor.socketPath);
     sockets.push(socket);
     const decoder = new FrameDecoder();
     const inbox = [];

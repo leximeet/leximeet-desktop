@@ -40,4 +40,5 @@ test("CI 按平台拆开 smoke，lint 不阻塞，超时与 concurrency 符合�
   assert.equal(setup.includes("cache: maven"), true);
   assert.equal(setup.includes(".runtime/electron-cache"), true);
   assert.equal(workflow.includes(".runtime/electron-builder"), true);
+  assert.equal(workflow.includes("protectWindowsPath"), true);
 });

@@ -218,6 +218,7 @@ jobs:
         run: |
           $tmp = Join-Path "${{ github.workspace }}" ".runtime/ci-tmp"
           New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          node -e "require('./electron/services/platform/win32-acl.cjs').protectWindowsPath(process.argv[1])" $tmp
           echo "TMP=$tmp" >> $env:GITHUB_ENV
           echo "TEMP=$tmp" >> $env:GITHUB_ENV
           echo "TMPDIR=$tmp" >> $env:GITHUB_ENV

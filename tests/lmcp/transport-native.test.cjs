@@ -2,7 +2,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
 const net = require("node:net");
 const { spawn } = require("node:child_process");
@@ -21,6 +20,7 @@ const { readPrivateJson } = require("../../electron/services/lmcp/private-files.
 const { buildNativeHost } = require("../../scripts/lmcp/build-host.cjs");
 const { startFocusMonitor } = require("../helpers/macos-focus-monitor.cjs");
 const { electronBinary } = require("../helpers/electron-binary.cjs");
+const { isolatedProfile } = require("../helpers/isolated-profile.cjs");
 
 const project = path.resolve(__dirname, "../..");
 const electron = electronBinary();
@@ -110,9 +110,8 @@ class CoreDouble {
 }
 
 async function fixture(t, options = {}) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "lmcp-native-test-"));
-  const profile = { name: "test", root: path.join(root, "desktop") };
-  fs.mkdirSync(profile.root, { mode: 0o700 });
+  const { root, profileRoot } = isolatedProfile(t, { prefix: "lmcp-native-test-" });
+  const profile = { name: "test", root: profileRoot };
   const { externalBundle = false, ...gatewayOptions } = options;
   const core = new CoreDouble();
   const gateway = new LmcpGateway({

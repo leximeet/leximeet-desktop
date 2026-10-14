@@ -98,7 +98,7 @@ function runNativeHost({
     return { close: finish, socket };
   } catch (error) {
     finish(
-      ["SOURCE_REJECTED", "UNSAFE_SOCKET"].includes(error.message)
+      ["SOURCE_REJECTED", "UNSAFE_SOCKET", "UNSAFE_PRIVATE_PATH"].includes(error.message)
         ? error.message
         : "HOST_UNAVAILABLE",
       true,
