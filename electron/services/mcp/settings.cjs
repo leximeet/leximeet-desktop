@@ -1,6 +1,12 @@
 "use strict";
 const { spawn } = require("node:child_process");
-const { CLIENTS, inspectClient, connect, disconnect } = require("./client-config.cjs");
+const {
+  CLIENTS,
+  inspectClient,
+  connect,
+  disconnect,
+  launchConfig,
+} = require("./client-config.cjs");
 const { encodeStdio, StdioDecoder } = require("./stdio-framing.cjs");
 
 const ACTIONS = new Set(["state", "connect", "disconnect", "test", "setWriteEnabled"]);
@@ -84,18 +90,12 @@ class AssistantSettings {
 
   testConnection() {
     return new Promise((resolve) => {
+      const launch = launchConfig(this.electronExecutable, this.shimPath, this.homeDir);
       const child = spawn(
-        this.electronExecutable,
-        [
-          "--run-as-node",
-          this.shimPath,
-          "--descriptor",
-          this.gateway.descriptorPath,
-          "--client",
-          "cursor",
-        ],
+        launch.command,
+        [...(launch.args || []), "--descriptor", this.gateway.descriptorPath, "--client", "cursor"],
         {
-          env: { ...this.env, ELECTRON_RUN_AS_NODE: "1" },
+          env: { ...this.env },
           stdio: ["pipe", "pipe", "pipe"],
         },
       );
@@ -135,7 +135,7 @@ class AssistantSettings {
           id: 1,
           method: "initialize",
           params: {
-            protocolVersion: "2025-03-26",
+            protocolVersion: "2025-06-18",
             capabilities: {},
             clientInfo: { name: "leximeet-settings", version: "1.0.1" },
           },

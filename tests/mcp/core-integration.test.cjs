@@ -58,13 +58,15 @@ test(
       id: 1,
       method: "initialize",
       params: {
-        protocolVersion: "2025-03-26",
+        protocolVersion: "2025-06-18",
         capabilities: {},
         clientInfo: { name: "it", version: "1.0.1" },
       },
     });
     await waitFor(() => replies.length >= 1);
     assert.equal(replies[0].result.serverInfo.name, "leximeet");
+    assert.equal(replies[0].result.protocolVersion, "2025-06-18");
+    assert.equal(replies[0].result.serverInfo.title, "词遇");
     send({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
     await waitFor(() => replies.length >= 2);
     assertTools(replies[1].result.tools, expectedSnapshot());
@@ -104,6 +106,14 @@ test(
     });
     await waitFor(() => replies.length >= 5);
     assert.equal(replies[4].result.structuredContent.code, "READ_ONLY");
+    send({
+      jsonrpc: "2.0",
+      id: 6,
+      method: "tools/call",
+      params: { name: "not_a_tool", arguments: {} },
+    });
+    await waitFor(() => replies.length >= 6);
+    assert.equal(replies[5].error.code, -32602);
   },
 );
 

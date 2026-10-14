@@ -32,6 +32,7 @@ const { LmcpGateway } = require("./services/lmcp/gateway.cjs");
 const { ConnectionSettings } = require("./services/connection-settings.cjs");
 const { McpGateway } = require("./services/mcp/gateway.cjs");
 const { AssistantSettings } = require("./services/mcp/settings.cjs");
+const { ensureLauncher } = require("./services/mcp/client-config.cjs");
 const { PluginCaptureNotifications } = require("./services/plugin-capture-notifications.cjs");
 const { BrowserDiscovery } = require("./services/browser-discovery.cjs");
 const { ConnectionNotifications } = require("./services/connection-notifications.cjs");
@@ -289,14 +290,21 @@ const mcpGateway = new McpGateway({
   awaitReady: () => ready,
   homeDir: app.getPath("home"),
 });
+const mcpShimPath = app.isPackaged
+  ? path.join(process.resourcesPath, "mcp-host", "host", "main.cjs")
+  : path.join(projectDir, "electron", "mcp-host", "main.cjs");
+// 升级或移动应用后重写启动脚本，客户端配置仍只指向这一条绝对路径。
+ensureLauncher({
+  homeDir: app.getPath("home"),
+  electronExecutable: process.execPath,
+  shimPath: mcpShimPath,
+});
 const assistantSettings = new AssistantSettings({
   core,
   gateway: mcpGateway,
   profile,
   electronExecutable: process.execPath,
-  shimPath: app.isPackaged
-    ? path.join(process.resourcesPath, "mcp-host", "host", "main.cjs")
-    : path.join(projectDir, "electron", "mcp-host", "main.cjs"),
+  shimPath: mcpShimPath,
   homeDir: app.getPath("home"),
   openExternal: (url) => shell.openExternal(url),
 });

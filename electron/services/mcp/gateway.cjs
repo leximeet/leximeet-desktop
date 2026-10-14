@@ -31,6 +31,7 @@ class McpGateway {
     handshakeTimeoutMs = 5000,
     forwardTimeoutMs = 20000,
     maxConnections = 8,
+    rateLimitPerMinute = 60,
   }) {
     if (!core?.request || !path.isAbsolute(profile?.root || ""))
       throw new Error("INVALID_MCP_GATEWAY_OPTIONS");
@@ -42,6 +43,7 @@ class McpGateway {
       handshakeTimeoutMs,
       forwardTimeoutMs,
       maxConnections,
+      rateLimitPerMinute,
     });
     this.pointerPath =
       pointerPath ||
@@ -116,6 +118,8 @@ class McpGateway {
       writer: new FrameWriter(socket, { onError: () => socket.destroy() }),
       decoder: new FrameDecoder(),
       authed: false,
+      clientId: "unknown",
+      calls: { started: Date.now(), count: 0 },
       timer: setTimeout(() => socket.destroy(), this.handshakeTimeoutMs),
     };
     session.timer.unref();
@@ -152,24 +156,41 @@ class McpGateway {
         typeof message.message !== "object"
       )
         throw new Error("INVALID_FRAME");
+      const id =
+        message.message && Object.hasOwn(message.message, "id") ? message.message.id : null;
+      if (message.message?.method === "tools/call" && this.limited(session)) {
+        session.writer.send({
+          kind: "mcp-response",
+          message: {
+            jsonrpc: "2.0",
+            id,
+            error: {
+              code: -32000,
+              message: "RATE_LIMITED: 请求过于频繁，请稍后再试",
+              data: { code: "RATE_LIMITED" },
+            },
+          },
+        });
+        return;
+      }
       let payload;
       try {
         await this.awaitReady();
-        payload = await this.core.request("/api/mcp", "POST", {
-          clientId: message.clientId || session.clientId,
-          message: message.message,
-        });
+        payload = await this.forward(session, message.message);
       } catch (error) {
-        const id =
-          message.message && Object.hasOwn(message.message, "id") ? message.message.id : null;
+        const code =
+          error.message === "MCP_FORWARD_TIMEOUT" ? "FORWARD_TIMEOUT" : "DESKTOP_NOT_RUNNING";
         payload = {
           message: {
             jsonrpc: "2.0",
             id,
             error: {
               code: -32000,
-              message: "DESKTOP_NOT_RUNNING: 词遇桌面未运行，请先打开应用后再试。",
-              data: { code: "DESKTOP_NOT_RUNNING" },
+              message:
+                code === "FORWARD_TIMEOUT"
+                  ? "FORWARD_TIMEOUT: 本机核心响应超时"
+                  : "DESKTOP_NOT_RUNNING: 词遇桌面未运行，请先打开应用后再试。",
+              data: { code },
             },
           },
         };
@@ -179,6 +200,36 @@ class McpGateway {
     } catch {
       session.socket.destroy();
     }
+  }
+
+  limited(session) {
+    const now = Date.now();
+    if (now - session.calls.started >= 60_000) session.calls = { started: now, count: 0 };
+    return ++session.calls.count > this.rateLimitPerMinute;
+  }
+
+  forward(session, rpc) {
+    const request = this.core.request("/api/mcp", "POST", {
+      clientId: session.clientId,
+      message: rpc,
+    });
+    if (!this.forwardTimeoutMs) return request;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error("MCP_FORWARD_TIMEOUT")),
+        this.forwardTimeoutMs,
+      );
+      Promise.resolve(request).then(
+        (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      );
+    });
   }
 
   status() {

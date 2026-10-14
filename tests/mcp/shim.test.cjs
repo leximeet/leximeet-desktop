@@ -13,7 +13,7 @@ function collect(stream) {
   return messages;
 }
 
-test("桌面未运行时 initialize 返回 DESKTOP_NOT_RUNNING", async () => {
+test("桌面未运行时 initialize 仍成功，工具调用才返回 DESKTOP_NOT_RUNNING", async () => {
   const input = new PassThrough();
   const output = new PassThrough();
   const messages = collect(output);
@@ -29,12 +29,23 @@ test("桌面未运行时 initialize 返回 DESKTOP_NOT_RUNNING", async () => {
       jsonrpc: "2.0",
       id: 7,
       method: "initialize",
-      params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "t" } },
+      params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t" } },
     }),
   );
   await new Promise((resolve) => setTimeout(resolve, 50));
-  assert.equal(messages[0].error.data.code, "DESKTOP_NOT_RUNNING");
-  assert.equal(messages[0].id, 7);
+  assert.equal(messages[0].result.serverInfo.name, "leximeet");
+  assert.equal(messages[0].result.protocolVersion, "2025-06-18");
+  input.write(
+    encodeStdio({
+      jsonrpc: "2.0",
+      id: 8,
+      method: "tools/call",
+      params: { name: "leximeet_help", arguments: {} },
+    }),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(messages[1].error.data.code, "DESKTOP_NOT_RUNNING");
+  assert.equal(messages[1].id, 8);
   shim.close();
 });
 
