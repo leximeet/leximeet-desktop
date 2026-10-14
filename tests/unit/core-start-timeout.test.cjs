@@ -2,7 +2,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { coreStartTimeoutMs } = require("../../electron/services/java-runtime.cjs");
-const { descriptorWaitMs } = require("../../scripts/install-smoke.cjs");
+const { descriptorWaitMs, appLaunchArgs } = require("../../scripts/install-smoke.cjs");
 
 test("Windows 首次启动握手宽于 POSIX，覆盖 Defender 实时扫描", () => {
   assert.equal(coreStartTimeoutMs("darwin"), 45000);
@@ -17,4 +17,12 @@ test("安装冒烟等待长于产品握手，Windows 仍不短于 POSIX 冒烟�
   assert.ok(descriptorWaitMs("win32") > descriptorWaitMs("linux"));
   assert.equal(descriptorWaitMs("linux"), 90000);
   assert.equal(descriptorWaitMs("win32"), 150000);
+});
+
+test("Windows 安装冒烟给 Electron 加 --disable-gpu，避免无显示 runner 挂住", () => {
+  assert.deepEqual(appLaunchArgs([], "linux"), []);
+  assert.ok(appLaunchArgs([], "win32").includes("--disable-gpu"));
+  assert.ok(
+    appLaunchArgs(["--appimage-extract-and-run"], "linux").includes("--appimage-extract-and-run"),
+  );
 });

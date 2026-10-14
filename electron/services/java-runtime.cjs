@@ -5,7 +5,7 @@ const { randomBytes } = require("node:crypto");
 const readline = require("node:readline");
 const { Readable, Transform } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
-const { signalTree } = require("./platform/process-tree.cjs");
+const { signalTree, pidAlive } = require("./platform/process-tree.cjs");
 
 const MAX_ARCHIVE_BYTES = 2 * 1024 * 1024 * 1024;
 const STARTUP_MESSAGES = Object.freeze({
@@ -392,6 +392,7 @@ class JavaRuntime {
     this.generation++;
     this.state = "stopped";
     const child = this.child;
+    const pid = child?.pid;
     const detachStdio = () => {
       try {
         child?.stdout?.destroy();
@@ -399,10 +400,20 @@ class JavaRuntime {
         /* 拆掉管道，避免 Node 为已死或将死的子进程一直等 close */
       }
     };
-    if (!child || !child.pid || child.exitCode !== null || child.signalCode !== null) {
-      detachStdio();
-      return;
+    detachStdio();
+    // Node 的 exitCode 在 Windows 上可能已置位，但 java.exe 仍活着；按 PID 再确认一次。
+    if (Number.isInteger(pid) && pidAlive(pid)) {
+      try {
+        signalTree(pid, "SIGKILL");
+      } catch {
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          /* ignore */
+        }
+      }
     }
+    if (!child || !pid || child.exitCode !== null || child.signalCode !== null) return;
     await new Promise((resolve) => {
       let settled = false;
       const done = () => {

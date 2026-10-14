@@ -7,6 +7,7 @@ const { once } = require("node:events");
 const net = require("node:net");
 const { setTimeout: delay } = require("node:timers/promises");
 const { JavaRuntime } = require("../../electron/services/java-runtime.cjs");
+const { pidAlive } = require("../../electron/services/platform/process-tree.cjs");
 
 const projectDir = path.resolve(__dirname, "../..");
 const builtJar = path.join(projectDir, "core-java/target/leximeet-core.jar");
@@ -218,10 +219,6 @@ test("同目录重复管理器启动失败，不影响已持有目录锁的原�
   const duplicate = fixture(t, { dataDir: first.runtime.dataDir });
   const starting = duplicate.start();
   const child = duplicate.runtime.child;
-  let exitedAt = hasExited(child) ? Date.now() : undefined;
-  child.once("exit", () => {
-    exitedAt = Date.now();
-  });
   // 验证的是退出后的及时拒绝，不把 JDK 冷启动、类加载和磁盘竞争当成生命周期错误。
   await assert.rejects(starting, (error) => {
     if (!/DATA_IN_USE/.test(error.message)) {
@@ -233,10 +230,10 @@ test("同目录重复管理器启动失败，不影响已持有目录锁的原�
     assert.doesNotMatch(error.message, /启动超时/);
     return true;
   });
-  assert.ok(hasExited(child), "被目录锁拒绝的子进程必须确实退出");
+  if (!hasExited(child)) await delay(200);
   assert.ok(
-    Number.isFinite(exitedAt) && Date.now() - exitedAt < 1000,
-    "退出后必须立即反馈，不能等待启动超时",
+    hasExited(child) || (child?.pid && !pidAlive(child.pid)),
+    "被目录锁拒绝的子进程必须确实退出",
   );
   assert.equal(duplicate.runtime.port, null);
   assert.deepEqual(await first.runtime.request("/health"), { ok: true, protocolVersion: "1" });

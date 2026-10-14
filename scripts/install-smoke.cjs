@@ -34,6 +34,31 @@ function run(command, args, options = {}) {
   return result;
 }
 
+function appLaunchArgs(kindArgs, platform = process.platform) {
+  const args = [...(kindArgs || [])];
+  // GitHub windows runner 无可用 GPU，Electron 会在就绪前挂住，描述符永远不出现。
+  if (platform === "win32") args.push("--disable-gpu", "--disable-software-rasterizer");
+  return args;
+}
+
+function listTree(root, limit = 80) {
+  const files = [];
+  const visit = (dir) => {
+    if (files.length >= limit || !fs.existsSync(dir)) return;
+    for (const name of fs.readdirSync(dir)) {
+      const full = path.join(dir, name);
+      files.push(path.relative(root, full) || ".");
+      try {
+        if (fs.statSync(full).isDirectory()) visit(full);
+      } catch {
+        /* 进程仍占用的文件跳过 */
+      }
+    }
+  };
+  visit(root);
+  return files;
+}
+
 function kindOf(installer, requested) {
   if (requested) return requested;
   if (/\.exe$/i.test(installer)) return "nsis";
@@ -142,12 +167,15 @@ async function main() {
       LEXIMEET_MCP_WRITE_POINTER: "1",
     },
   });
-  const child = spawn(installed.exe, installed.args || [], {
+  const stderrFile = path.join(profileDir, "app.stderr.log");
+  const stderrFd = fs.openSync(stderrFile, "w");
+  const child = spawn(installed.exe, appLaunchArgs(installed.args || []), {
     env: childEnv,
-    stdio: "ignore",
+    stdio: ["ignore", "ignore", stderrFd],
     windowsHide: true,
     detached: process.platform !== "win32",
   });
+  fs.closeSync(stderrFd);
   let failed = "";
   try {
     const descriptor = await waitFor(
@@ -177,6 +205,15 @@ async function main() {
     console.log(JSON.stringify({ ok: true, kind, tools: result.tools, descriptor }, null, 2));
   } catch (error) {
     failed = error.message;
+    try {
+      console.error(failed);
+      console.error(`app pid=${child.pid} exit=${child.exitCode} signal=${child.signalCode}`);
+      console.error(`profile ${profileDir}\n${listTree(profileDir).join("\n")}`);
+      if (fs.existsSync(stderrFile))
+        console.error(`stderr:\n${fs.readFileSync(stderrFile, "utf8").slice(-4000)}`);
+    } catch {
+      /* 诊断失败不覆盖原错误 */
+    }
     throw error;
   } finally {
     if (child.pid) {
@@ -204,4 +241,4 @@ if (require.main === module)
     console.error(error.message);
     process.exitCode = 1;
   });
-module.exports = { main, kindOf, descriptorWaitMs };
+module.exports = { main, kindOf, descriptorWaitMs, appLaunchArgs };
