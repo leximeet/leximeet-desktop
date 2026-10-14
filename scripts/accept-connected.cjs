@@ -272,7 +272,7 @@ class OwnedProcesses {
     try {
       this.kill(process.platform === "win32" ? child.pid : -child.pid, signal);
     } catch (error) {
-      if (error.code !== "ESRCH") throw error;
+      if (error.code !== "ESRCH" && error.code !== "EPERM") throw error;
     }
   }
   groupAlive(child) {
@@ -283,6 +283,7 @@ class OwnedProcesses {
       return true;
     } catch (error) {
       if (error.code === "ESRCH") return false;
+      if (error.code === "EPERM") return true;
       throw error;
     }
   }

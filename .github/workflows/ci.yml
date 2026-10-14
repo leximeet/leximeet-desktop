@@ -40,7 +40,13 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
+      - run: |
+          ok=0
+          for attempt in 1 2 3; do
+            if npm ci; then ok=1; break; fi
+            sleep $((attempt * 4))
+          done
+          test "$ok" = 1
       - name: Verify formatting and public documents
         run: |
           npm run format:check
@@ -93,7 +99,12 @@ jobs:
       - name: Run the cross-platform core gate
         if: matrix.suite == 'core-cross'
         run: |
-          npm ci
+          ok=0
+          for attempt in 1 2 3; do
+            if npm ci; then ok=1; break; fi
+            sleep $((attempt * 4))
+          done
+          test "$ok" = 1
           node scripts/verify-cross.cjs
       - name: Verify actual Core Jar, SBOM and original license bytes
         run: python3 core-java/scripts/verify-release.py

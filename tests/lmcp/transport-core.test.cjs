@@ -102,8 +102,12 @@ test("真实Core贯通1.0.0配对/采集幂等/桌面投影/重启恢复/撤权"
       if (focus) {
         const report = await focus.stop();
         t.diagnostic(`LMCP_CORE_FOCUS ${JSON.stringify(report)}`);
-        assert.equal(report.complete, true, report.error || "焦点监测不完整");
-        assert.deepEqual(report.violations, []);
+        if (process.platform === "darwin") {
+          assert.equal(report.complete, true, report.error || "焦点监测不完整");
+          assert.deepEqual(report.violations, []);
+        } else {
+          assert.equal(report.supported, false);
+        }
       }
     }
   });

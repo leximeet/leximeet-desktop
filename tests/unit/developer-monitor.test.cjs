@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const path = require("node:path");
 const { DeveloperMonitor } = require("../../electron/services/developer-monitor.cjs");
 const { createBridge } = require("../../electron/services/bridge.cjs");
 const { DesktopController } = require("../../electron/services/desktop-controller.cjs");
@@ -204,7 +205,7 @@ test("原生操作只允许固定动作/本机目录，验收环境不能修改�
     await assert.rejects(desktop.action(payload));
   await desktop.action({ action: "showDataFolder" });
   await desktop.action({ action: "showLogsFolder" });
-  assert.deepEqual(opened, ["/owned/test", "/owned/test/logs"]);
+  assert.deepEqual(opened, [path.join("/owned/test"), path.join("/owned/test", "logs")]);
   desktop.apply({ closeBehavior: "quit", launchAtLogin: false });
   assert.equal(desktop.shouldHide(), false);
   assert.equal((await desktop.action({ action: "restartCore" })).runtime.coreState, "ready");

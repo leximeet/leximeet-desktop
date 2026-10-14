@@ -19,14 +19,17 @@ test("新构建按版本、架构和时间隔离，明确目录优先", () => {
     env: {},
   };
   const output = newPackageOutput("/project", options);
-  assert.equal(output, "/project/release/1.0.0/darwin-arm64/20261004T000000000Z");
+  assert.equal(
+    output,
+    path.join("/project", "release", "1.0.0", "darwin-arm64", "20261004T000000000Z"),
+  );
   assert.notEqual(
     output,
     newPackageOutput("/project", { ...options, now: new Date("2026-10-04T00:00:00.001Z") }),
   );
   assert.equal(
     newPackageOutput("/project", { ...options, env: { LEXIMEET_BUILD_OUTPUT: "custom" } }),
-    "/project/custom",
+    path.resolve("/project", "custom"),
   );
 });
 

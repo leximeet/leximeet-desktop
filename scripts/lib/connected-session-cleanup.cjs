@@ -12,7 +12,8 @@ function privateDirectory(directory) {
     throw new Error("拒绝回收软链接或非本轮真实目录");
   if (typeof process.getuid === "function" && stat.uid !== process.getuid())
     throw new Error("拒绝回收其他用户的隔离目录");
-  if ((stat.mode & 0o077) !== 0) throw new Error("隔离目录权限不安全，保留资料供检查");
+  if (process.platform !== "win32" && (stat.mode & 0o077) !== 0)
+    throw new Error("隔离目录权限不安全，保留资料供检查");
 }
 function readSmallJson(file) {
   const stat = fs.lstatSync(file);
@@ -21,7 +22,8 @@ function readSmallJson(file) {
   return JSON.parse(fs.readFileSync(file, "utf8"));
 }
 function processExists(pid) {
-  for (const identity of [pid, -pid]) {
+  const identities = process.platform === "win32" ? [pid] : [pid, -pid];
+  for (const identity of identities) {
     try {
       process.kill(identity, 0);
       return true;

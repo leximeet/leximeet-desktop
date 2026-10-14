@@ -1,5 +1,6 @@
 "use strict";
 const os = require("node:os");
+const path = require("node:path");
 const { createHash } = require("node:crypto");
 const { execFileSync } = require("node:child_process");
 
@@ -19,15 +20,31 @@ function currentUserKey(platform = process.platform) {
   return createHash("sha256").update(currentUsername()).digest("hex").slice(0, 8);
 }
 
+function windowsWhoami(args = []) {
+  const roots = [process.env.SystemRoot, process.env.WINDIR, "C:\\Windows"].filter(Boolean);
+  const binaries = [
+    ...roots.map((root) => path.join(root, "System32", "whoami.exe")),
+    "whoami.exe",
+  ];
+  let last;
+  for (const binary of binaries) {
+    try {
+      return execFileSync(binary, args, {
+        encoding: "utf8",
+        windowsHide: true,
+        timeout: 5000,
+      });
+    } catch (error) {
+      last = error;
+    }
+  }
+  throw last || new Error("whoami");
+}
+
 function currentWindowsSid() {
   if (process.platform !== "win32") return "";
   try {
-    const out = execFileSync("whoami", ["/user"], {
-      encoding: "utf8",
-      windowsHide: true,
-      timeout: 5000,
-    });
-    const match = /(S-1-5-[0-9-]+)/.exec(out);
+    const match = /(S-1-5-[0-9-]+)/.exec(windowsWhoami(["/user"]));
     return match ? match[1] : "";
   } catch {
     return "";
@@ -37,12 +54,7 @@ function currentWindowsSid() {
 function currentWindowsAccount() {
   if (process.platform !== "win32") return currentUsername();
   try {
-    const out = execFileSync("whoami", [], {
-      encoding: "utf8",
-      windowsHide: true,
-      timeout: 5000,
-    });
-    return out.trim() || currentUsername();
+    return windowsWhoami().trim() || currentUsername();
   } catch {
     return currentUsername();
   }

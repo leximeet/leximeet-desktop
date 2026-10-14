@@ -73,7 +73,22 @@ function verifyPackageMaterials({ projectDir, resourcesDir }) {
   };
   const archive = path.join(resourcesDir, "app.asar");
   assertRuntimeDependencyBoundary(archive);
-  const fromAsar = (file) => () => extractFile(archive, file, false);
+  const fromAsar = (file) => () => {
+    const posix = file.replace(/\\/g, "/");
+    try {
+      return extractFile(archive, posix, false);
+    } catch (error) {
+      const win = posix.replace(/\//g, "\\");
+      if (win !== posix) {
+        try {
+          return extractFile(archive, win, false);
+        } catch {
+          /* 继续抛出 posix 路径的原始错误 */
+        }
+      }
+      throw error;
+    }
+  };
   for (const file of ["LICENSE", "frontend/src/assets/audio/NOTICE.md"])
     compare(`app.asar/${file}`, file, fromAsar(file));
   // 公开资源许可与协议冻结物料都按原字节随包，不仅检查文件名存在。

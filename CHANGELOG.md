@@ -18,6 +18,7 @@
 - 私有路径检查允许 macOS `/tmp` → `/private/tmp`、`/var` → `/private/var` 系统前缀，不再把本机 UDS 与临时目录误判为不安全。
 - Windows / Linux 的 core-cross 门禁先准备随包 Core 词典；lint 检出 `core-java` 以便核对文档链接。
 - Windows 单元测试不再依赖 POSIX 进程组或 inode 替换；`test:unit` 为单例加上时限，避免挂死占用整次作业。
+- Windows 路径断言、NTFS 权限、`whoami.exe` 与 ASAR 正斜杠抽取与本机语义对齐；非 macOS 不再要求系统焦点监测 complete。
 
 ### 边界
 
