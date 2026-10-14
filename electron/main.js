@@ -55,7 +55,10 @@ const profile = resolveProfile({
   name: process.env.LEXIMEET_PROFILE || (app.isPackaged ? "local" : "dev"),
   dataDir: process.env.LEXIMEET_DATA_DIR,
   projectDir,
-  userData: path.join(app.getPath("appData"), "LexiMeet"),
+  // 隔离冒烟会改 USERPROFILE；未创建 AppData\Roaming 时 getPath('appData') 会抛。
+  userData: process.env.LEXIMEET_DATA_DIR
+    ? process.env.LEXIMEET_DATA_DIR
+    : path.join(app.getPath("appData"), "LexiMeet"),
 });
 // 在导入框架和 ready 之前设置 Chromium 的目录，避免启动即写入默认 Electron 缓存。
 app.setPath("userData", profile.root);

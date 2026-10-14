@@ -41,6 +41,19 @@ function appLaunchArgs(kindArgs, platform = process.platform) {
   return args;
 }
 
+function prepareIsolatedHome(profileDir, env) {
+  const dirs = [profileDir];
+  if (env.APPDATA) dirs.push(env.APPDATA);
+  if (env.LOCALAPPDATA) dirs.push(env.LOCALAPPDATA);
+  if (process.platform === "win32") {
+    dirs.push(
+      path.join(profileDir, "AppData", "Roaming"),
+      path.join(profileDir, "AppData", "Local"),
+    );
+  }
+  for (const dir of dirs) fs.mkdirSync(dir, { recursive: true });
+}
+
 function listTree(root, limit = 80) {
   const files = [];
   const visit = (dir) => {
@@ -167,6 +180,7 @@ async function main() {
       LEXIMEET_MCP_WRITE_POINTER: "1",
     },
   });
+  prepareIsolatedHome(profileDir, childEnv);
   const stderrFile = path.join(profileDir, "app.stderr.log");
   const stderrFd = fs.openSync(stderrFile, "w");
   const child = spawn(installed.exe, appLaunchArgs(installed.args || []), {
@@ -249,4 +263,4 @@ if (require.main === module)
     console.error(error.message);
     process.exitCode = 1;
   });
-module.exports = { main, kindOf, descriptorWaitMs, appLaunchArgs };
+module.exports = { main, kindOf, descriptorWaitMs, appLaunchArgs, prepareIsolatedHome };

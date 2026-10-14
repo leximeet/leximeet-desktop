@@ -9,6 +9,7 @@ const {
   signalTree,
   listPidsByCommandLine,
   signalOwnedByMarker,
+  windowsCommandLineQuery,
 } = require("../../electron/services/platform/process-tree.cjs");
 
 const TREE_SCRIPT =
@@ -59,6 +60,13 @@ test("停止后本轮子进程确实退出", async (t) => {
   assert.equal(pidAlive(parent.pid), false);
   assert.equal(pidAlive(childPid), false);
   assert.equal(treeAlive(parent.pid), false);
+});
+
+test("Windows 命令行查询脚本用分号分隔赋值，避免 PowerShell 解析失败", () => {
+  const script = windowsCommandLineQuery("C:\\tmp\\leximeet-core");
+  assert.match(script, /\$n = "C:\\\\tmp\\\\leximeet-core";/);
+  assert.match(script, /Get-CimInstance -ClassName Win32_Process/);
+  assert.doesNotMatch(script, /" Get-CimInstance/);
 });
 
 test("按命令行标记回收只在 Windows 生效，其它平台为空操作", async (t) => {

@@ -109,18 +109,23 @@ function windowsTaskkill(pid, force) {
 }
 
 /** Windows 上 Node 跟踪的 PID 可能不是真正持锁的 JVM；只匹配本实例资料目录的命令行。 */
+function windowsCommandLineQuery(needle) {
+  return `$n = ${JSON.stringify(String(needle))}; Get-CimInstance -ClassName Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($n) } | ForEach-Object { $_.ProcessId }`;
+}
+
 function listPidsByCommandLine(needle) {
   if (process.platform !== "win32" || !needle) return [];
-  const script = [
-    `$n = ${JSON.stringify(String(needle))}`,
-    "Get-CimInstance -ClassName Win32_Process |",
-    "  Where-Object { $_.CommandLine -and $_.CommandLine.Contains($n) } |",
-    "  ForEach-Object { $_.ProcessId }",
-  ].join(" ");
   try {
     const output = execFileSync(
       "powershell.exe",
-      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        windowsCommandLineQuery(needle),
+      ],
       { encoding: "utf8", windowsHide: true, timeout: 15000 },
     );
     return parsePids(output).filter((pid) => pid !== process.pid);
@@ -159,4 +164,5 @@ module.exports = {
   signalTree,
   listPidsByCommandLine,
   signalOwnedByMarker,
+  windowsCommandLineQuery,
 };

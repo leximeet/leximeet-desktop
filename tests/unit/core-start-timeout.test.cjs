@@ -1,8 +1,15 @@
 "use strict";
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 const { coreStartTimeoutMs } = require("../../electron/services/java-runtime.cjs");
-const { descriptorWaitMs, appLaunchArgs } = require("../../scripts/install-smoke.cjs");
+const {
+  descriptorWaitMs,
+  appLaunchArgs,
+  prepareIsolatedHome,
+} = require("../../scripts/install-smoke.cjs");
 
 test("Windows 首次启动握手宽于 POSIX，覆盖 Defender 实时扫描", () => {
   assert.equal(coreStartTimeoutMs("darwin"), 45000);
@@ -30,4 +37,16 @@ test("Windows 安装冒烟给 Electron 加 --disable-gpu，避免无显示 runne
   assert.ok(
     appLaunchArgs(["--appimage-extract-and-run"], "linux").includes("--appimage-extract-and-run"),
   );
+});
+
+test("隔离冒烟会创建 Windows AppData 目录，避免 Electron getPath 失败", (t) => {
+  const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), "leximeet-smoke-home-"));
+  t.after(() => fs.rmSync(profileDir, { recursive: true, force: true }));
+  const env = {
+    APPDATA: path.join(profileDir, "AppData", "Roaming"),
+    LOCALAPPDATA: path.join(profileDir, "AppData", "Local"),
+  };
+  prepareIsolatedHome(profileDir, env);
+  assert.equal(fs.existsSync(env.APPDATA), true);
+  assert.equal(fs.existsSync(env.LOCALAPPDATA), true);
 });
