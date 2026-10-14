@@ -90,6 +90,32 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.13"
+      - name: Keep Windows Defender off Core SQLite copies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tmp = Join-Path "${{ github.workspace }}" ".runtime/ci-tmp"
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          $javaTmp = ($tmp -replace '\\', '/')
+          $existing = [Environment]::GetEnvironmentVariable("JAVA_TOOL_OPTIONS", "Process")
+          $javaOptions = if ([string]::IsNullOrWhiteSpace($existing)) {
+            "-Djava.io.tmpdir=$javaTmp"
+          } else {
+            "$existing -Djava.io.tmpdir=$javaTmp"
+          }
+          echo "TMP=$tmp" >> $env:GITHUB_ENV
+          echo "TEMP=$tmp" >> $env:GITHUB_ENV
+          echo "TMPDIR=$tmp" >> $env:GITHUB_ENV
+          echo "JAVA_TOOL_OPTIONS=$javaOptions" >> $env:GITHUB_ENV
+          $paths = @("${{ github.workspace }}", "${{ runner.temp }}", $tmp)
+          foreach ($path in ($paths | Select-Object -Unique)) {
+            if ($path) {
+              try { Add-MpPreference -ExclusionPath $path } catch { Write-Warning $_ }
+            }
+          }
+          foreach ($proc in @("java.exe", "javaw.exe")) {
+            try { Add-MpPreference -ExclusionProcess $proc } catch { Write-Warning $_ }
+          }
       - name: Check the acceptance architecture
         if: matrix.suite == 'full'
         run: node -e "if(process.arch !== 'arm64') throw new Error('macOS 完整门禁要求 arm64 runner')"

@@ -5,6 +5,11 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "author": "LexiMeet contributors",
+  "homepage": "https://github.com/leximeet/leximeet-desktop",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/leximeet/leximeet-desktop.git"
+  },
   "main": "electron/main.js",
   "engines": {
     "node": ">=24.0.0"
@@ -182,7 +187,8 @@
         "deb"
       ],
       "category": "Education",
-      "executableName": "leximeet"
+      "executableName": "leximeet",
+      "maintainer": "LexiMeet contributors <leximeet@users.noreply.github.com>"
     },
     "deb": {
       "packageName": "leximeet",
