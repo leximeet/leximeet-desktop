@@ -1,6 +1,4 @@
-功能：1.0.1 增加 AI 助手连接（MCP）
+维护：将 Core gitlink 更新为已公开的 61e7aa3
 
-- Core 实现路由式工具、写入授权与 /api/mcp，默认只读
-- Electron 只保留薄 stdio shim、配置写入和设置页
-- 接入 Cursor / Codex / Claude Code，配置不含密钥
-- 契约、shim、安全与 Core 集成测试接入桌面门禁
+- 指向 leximeet-desktop-core 已推送提交，CI 可递归检出
+- 内容与本地 857e21a 相同，仅 SHA 因补丁重放而不同
