@@ -26,8 +26,11 @@ function coreEnvironment(environment = process.env) {
   for (const key of ["JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS"]) delete result[key];
   return result;
 }
+const STARTUP_CODE_PATTERN = new RegExp(`\\[(${Object.keys(STARTUP_MESSAGES).join("|")})\\]`);
+
 function startupFailure(stderr, exitCode) {
-  const code = /Core 启动失败：\[([A-Z_]+)\]/.exec(stderr)?.[1];
+  const code =
+    /Core 启动失败：\[([A-Z_]+)\]/.exec(stderr)?.[1] || STARTUP_CODE_PATTERN.exec(stderr)?.[1];
   const message = STARTUP_MESSAGES[code];
   return message
     ? `本机核心启动失败 [${code}]：${message}`
@@ -48,23 +51,68 @@ function attachStderr(child, { limit = 4000 } = {}) {
 
 function readLogTail(file, limit = 4000) {
   try {
-    return fs.readFileSync(file, "utf8").slice(-limit);
+    const bytes = fs.readFileSync(file);
+    if (!bytes.length) return "";
+    const utf8 = bytes.toString("utf8");
+    if (/Core 启动失败|DATA_IN_USE|\[[A-Z_]{4,}\]/.test(utf8)) return utf8.slice(-limit);
+    const utf16 = bytes.toString("utf16le");
+    if (/Core 启动失败|DATA_IN_USE|\[[A-Z_]{4,}\]/.test(utf16)) return utf16.slice(-limit);
+    return utf8.slice(-limit);
   } catch {
     return "";
   }
 }
 
-function spawnJava(java, args, env, stderrFile) {
-  const stderrFd = fs.openSync(stderrFile, "w", 0o600);
-  try {
-    return spawn(java, args, {
-      stdio: ["ignore", "pipe", stderrFd],
-      windowsHide: true,
-      env,
-    });
-  } finally {
-    fs.closeSync(stderrFd);
+/** Windows 优先 javaw。隐藏 java.exe 控制台会另开控制台，System.err 不再写入重定向文件。 */
+function preferWindowlessJava(
+  java,
+  { platform = process.platform, exists = (file) => fs.existsSync(file), env = process.env } = {},
+) {
+  if (platform !== "win32" || typeof java !== "string") return java;
+  if (/javaw(\.exe)?$/i.test(java)) return java;
+  const named = /\.exe$/i.test(java) ? java : `${java}.exe`;
+  if (/java\.exe$/i.test(named)) {
+    const sibling = `${named.slice(0, -"java.exe".length)}javaw.exe`;
+    if (exists(sibling)) return sibling;
   }
+  if (!path.isAbsolute(java) && env.JAVA_HOME) {
+    const home = path.join(env.JAVA_HOME, "bin", "javaw.exe");
+    if (exists(home)) return home;
+  }
+  return java;
+}
+
+function closeStderrLog(child) {
+  if (typeof child?.closeStderr === "function") child.closeStderr();
+}
+
+function spawnJava(java, args, env, stderrFile) {
+  const executable = preferWindowlessJava(java);
+  const stderrFd = fs.openSync(stderrFile, "w", 0o600);
+  let closed = false;
+  const closeStderr = () => {
+    if (closed) return;
+    closed = true;
+    try {
+      fs.fsyncSync(stderrFd);
+    } catch {
+      /* 子进程已退出 */
+    }
+    try {
+      fs.closeSync(stderrFd);
+    } catch {
+      /* 已关闭 */
+    }
+  };
+  const child = spawn(executable, args, {
+    stdio: ["ignore", "pipe", stderrFd],
+    // 已重定向 stderr；再 windowsHide 会让 java.exe 丢掉 DATA_IN_USE。无窗口靠 javaw。
+    windowsHide: false,
+    env,
+  });
+  child.closeStderr = closeStderr;
+  child.once("close", closeStderr);
+  return child;
 }
 
 function javaExecutable(env = process.env) {
@@ -145,6 +193,8 @@ class JavaRuntime {
     const args = [
       "--enable-native-access=ALL-UNNAMED",
       "-Dfile.encoding=UTF-8",
+      "-Dsun.stderr.encoding=UTF-8",
+      "-Dsun.stdout.encoding=UTF-8",
       `-Djava.io.tmpdir=${runDir}`,
       "-jar",
       runJar,
@@ -202,8 +252,9 @@ class JavaRuntime {
           finish(new Error("无法启动随包 Java 21，请检查完整安装包与执行权限")),
         );
         child.once("close", (code) => {
+          closeStderrLog(child);
           const text = harvest();
-          // 等 close 再删运行目录，让 Windows 把 System.exit 前的 stderr 刷进文件。
+          // 先 fsync/关闭句柄再读文件，再删运行目录。
           removeRunDir();
           finish(new Error(this.stopping ? "Java Core 启动已取消" : startupFailure(text, code)));
         });
@@ -397,4 +448,6 @@ module.exports = {
   attachStderr,
   readLogTail,
   spawnJava,
+  preferWindowlessJava,
+  closeStderrLog,
 };

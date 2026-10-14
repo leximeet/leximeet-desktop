@@ -11,6 +11,8 @@ const {
   attachStderr,
   readLogTail,
   spawnJava,
+  preferWindowlessJava,
+  closeStderrLog,
 } = require("../../electron/services/java-runtime.cjs");
 
 test("Java 注入参数不传给子进程，原环境保持不变", () => {
@@ -41,6 +43,9 @@ test("启动 UI 仅使用固定错误分类，不显示 JVM 原文或任意参�
     startupFailure("Core 启动失败：[UNSUPPORTED_DATA_SCHEMA] schema 8", 1),
     /匹配的应用/,
   );
+  assert.match(startupFailure("[DATA_IN_USE] locked", 1), /另一应用使用/);
+  assert.match(startupFailure("????：[DATA_IN_USE] locked", 1), /DATA_IN_USE/);
+  assert.doesNotMatch(startupFailure("[NOT_A_STARTUP_CODE] private", 1), /NOT_A_STARTUP_CODE/);
 });
 
 test("等 close 再读 stderr，DATA_IN_USE 不会被误报成通用退出码", async () => {
@@ -71,8 +76,46 @@ test("stderr 接到文件后，进程退出仍能读到 DATA_IN_USE", async (t) 
   );
   const code = await new Promise((resolve, reject) => {
     child.once("error", reject);
-    child.once("close", resolve);
+    child.once("close", (exitCode) => {
+      closeStderrLog(child);
+      resolve(exitCode);
+    });
   });
   assert.equal(code, 1);
   assert.match(startupFailure(readLogTail(stderrFile), code), /DATA_IN_USE/);
+});
+
+test("stderr 文件按 UTF-16LE 回退仍能读到固定分类码", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "leximeet-stderr-utf16-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const file = path.join(root, "stderr.log");
+  fs.writeFileSync(file, Buffer.from("Core 启动失败：[DATA_IN_USE] locked\n", "utf16le"));
+  assert.match(readLogTail(file), /DATA_IN_USE/);
+  assert.match(startupFailure(readLogTail(file), 1), /另一应用使用/);
+});
+
+test("Windows 优先选用旁边的 javaw，其它平台保持原路径", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "leximeet-javaw-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const java = path.join(root, "java.exe");
+  const javaw = path.join(root, "javaw.exe");
+  fs.writeFileSync(java, "");
+  fs.writeFileSync(javaw, "");
+  const exists = (file) => fs.existsSync(file);
+  assert.equal(preferWindowlessJava(java, { platform: "linux", exists }), java);
+  assert.equal(preferWindowlessJava(java, { platform: "win32", exists }), javaw);
+  assert.equal(preferWindowlessJava(path.join(root, "java"), { platform: "win32", exists }), javaw);
+  assert.equal(preferWindowlessJava(javaw, { platform: "win32", exists }), javaw);
+  assert.equal(
+    preferWindowlessJava("java", {
+      platform: "win32",
+      exists: (file) => file === path.join(root, "bin", "javaw.exe"),
+      env: { JAVA_HOME: root },
+    }),
+    path.join(root, "bin", "javaw.exe"),
+  );
+  assert.equal(
+    preferWindowlessJava(path.join(root, "missing-java.exe"), { platform: "win32", exists }),
+    path.join(root, "missing-java.exe"),
+  );
 });
