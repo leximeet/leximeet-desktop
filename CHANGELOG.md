@@ -24,7 +24,8 @@
 - NTFS 收紧时目录用 `(OI)(CI)(F)`、文件只用 `(F)`，避免私有 JSON 写失败。Linux 的 `packageName` 放到 `deb`，符合 electron-builder 26 的 schema。
 - Linux `.deb` 补 `linux.maintainer` 与项目主页，满足 electron-builder FpmTarget；不把缺少作者邮箱当成可跳过。Windows CI 仅在 core-cross 单元/Core 测试中把工作区、TEMP 与 `java.exe` 排除出 Defender，并用 `TEMP` 把 JUnit 临时目录放到工作区内；不注入 `JAVA_TOOL_OPTIONS`。不改 Core 的 15 秒产品预算。
 - Desktop 等待 Core 启动：macOS/Linux 仍 45 秒；Windows 首次启动为 120 秒，覆盖 Defender 对随包 JRE 与 Jar 的实时扫描，不自动重试。install-smoke 的 Windows 任务保持 Defender 开启，用真实环境验证安装后启动。
-- Windows 上 Core 启动失败把 stderr 落到运行目录文件再读（与 Core 自身测试相同），避免 `System.exit` 丢掉管道里的 `DATA_IN_USE`。优先 `javaw`，并保持文件句柄到 `close` 后 fsync；不再用 `windowsHide` 让 `java.exe` 另开隐藏控制台。随包 JRE 补入 `javaw.exe`。分类码在中文前缀乱码时仍认固定 `[CODE]`。
+- Windows 上 Core 启动失败把 stderr 落到运行目录文件再读。优先 `javaw`；父进程立刻关掉自己的文件句柄，避免 Windows 上 `close` 永远等不到而把 CI 挂死。`stop` 用进程树有界结束。随包 JRE 补 `javaw.exe`。分类码在中文前缀乱码时仍认固定 `[CODE]`。
+- CI 拆成并行作业：lint 不阻塞；macOS verify / 七日旅程 / 打包三分片；Windows / Ubuntu 的 core-cross 与打包分开；install-smoke 只依赖对应平台安装包。启用 npm / Maven / Electron / electron-builder 缓存。作业超时收紧；门禁脚本超时后打印进程树。
 
 ### 边界
 

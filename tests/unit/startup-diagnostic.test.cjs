@@ -12,7 +12,6 @@ const {
   readLogTail,
   spawnJava,
   preferWindowlessJava,
-  closeStderrLog,
 } = require("../../electron/services/java-runtime.cjs");
 
 test("Java 注入参数不传给子进程，原环境保持不变", () => {
@@ -76,10 +75,7 @@ test("stderr 接到文件后，进程退出仍能读到 DATA_IN_USE", async (t) 
   );
   const code = await new Promise((resolve, reject) => {
     child.once("error", reject);
-    child.once("close", (exitCode) => {
-      closeStderrLog(child);
-      resolve(exitCode);
-    });
+    child.once("exit", resolve);
   });
   assert.equal(code, 1);
   assert.match(startupFailure(readLogTail(stderrFile), code), /DATA_IN_USE/);

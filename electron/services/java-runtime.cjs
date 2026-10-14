@@ -5,6 +5,7 @@ const { randomBytes } = require("node:crypto");
 const readline = require("node:readline");
 const { Readable, Transform } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
+const { signalTree } = require("./platform/process-tree.cjs");
 
 const MAX_ARCHIVE_BYTES = 2 * 1024 * 1024 * 1024;
 const STARTUP_MESSAGES = Object.freeze({
@@ -82,36 +83,16 @@ function preferWindowlessJava(
   return java;
 }
 
-function closeStderrLog(child) {
-  if (typeof child?.closeStderr === "function") child.closeStderr();
-}
-
 function spawnJava(java, args, env, stderrFile) {
   const executable = preferWindowlessJava(java);
   const stderrFd = fs.openSync(stderrFile, "w", 0o600);
-  let closed = false;
-  const closeStderr = () => {
-    if (closed) return;
-    closed = true;
-    try {
-      fs.fsyncSync(stderrFd);
-    } catch {
-      /* 子进程已退出 */
-    }
-    try {
-      fs.closeSync(stderrFd);
-    } catch {
-      /* 已关闭 */
-    }
-  };
   const child = spawn(executable, args, {
     stdio: ["ignore", "pipe", stderrFd],
-    // 已重定向 stderr；再 windowsHide 会让 java.exe 丢掉 DATA_IN_USE。无窗口靠 javaw。
+    // 无窗口靠 javaw。父进程立刻关掉自己的 stderr 副本；留到 close 再关会在 Windows 上死锁。
     windowsHide: false,
     env,
   });
-  child.closeStderr = closeStderr;
-  child.once("close", closeStderr);
+  fs.closeSync(stderrFd);
   return child;
 }
 
@@ -251,10 +232,8 @@ class JavaRuntime {
         child.once("error", () =>
           finish(new Error("无法启动随包 Java 21，请检查完整安装包与执行权限")),
         );
-        child.once("close", (code) => {
-          closeStderrLog(child);
+        child.once("exit", (code) => {
           const text = harvest();
-          // 先 fsync/关闭句柄再读文件，再删运行目录。
           removeRunDir();
           finish(new Error(this.stopping ? "Java Core 启动已取消" : startupFailure(text, code)));
         });
@@ -414,18 +393,25 @@ class JavaRuntime {
     const child = this.child;
     if (!child || !child.pid || child.exitCode !== null || child.signalCode !== null) return;
     await new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        child.kill("SIGKILL");
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(soft);
+        clearTimeout(hard);
+        resolve();
+      };
+      const soft = setTimeout(() => {
+        try {
+          signalTree(child.pid, "SIGKILL");
+        } catch {
+          child.kill("SIGKILL");
+        }
       }, 2500);
-      timer.unref();
-      child.once("exit", () => {
-        clearTimeout(timer);
-        resolve();
-      });
-      child.once("error", () => {
-        clearTimeout(timer);
-        resolve();
-      });
+      // 有界退出：Windows 上 close/exit 丢失时不能把整个 CI 门禁挂死。
+      const hard = setTimeout(done, 8000);
+      child.once("exit", done);
+      child.once("error", done);
       child.kill();
     });
   }
@@ -449,5 +435,4 @@ module.exports = {
   readLogTail,
   spawnJava,
   preferWindowlessJava,
-  closeStderrLog,
 };

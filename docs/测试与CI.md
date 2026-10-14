@@ -65,14 +65,14 @@ Windows / Linux 仍使用隐藏窗口、静音、受控输入和资源隔离，�
 
 ## 持续集成门禁
 
-| 工作流             | 范围                                                                                                                                                                                                                                         |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ci.yml             | lint 在 ubuntu（递归检出 Core 子模块以核对文档链接）；desktop 矩阵 macos-15（完整门禁）/ windows-2025 / ubuntu-24.04（core-cross，先准备随包词典）；`fail-fast: false`；install-smoke 在 desktop 未取消时展开矩阵，不因 sibling 失败整组跳过 |
-| lmcp-workspace.yml | 固定 Browser 引用和 Core gitlink；生产扩展通过真实 Native Host 连接源码与打包 Desktop；Linux 可无头联调，Windows 插件仍人工                                                                                                                  |
-| visual.yml         | 手动运行当前真实原生使用链路及明暗/窄窗截图，供人工审查；不宣称像素比较通过                                                                                                                                                                  |
-| candidate.yml      | 三端矩阵构建全部安装包（mac dmg/zip、win nsis、linux AppImage+deb），真实安装验证与对应源码；三端齐套后合并 feed / SHA256SUMS 再公开 Release                                                                                                 |
+| 工作流             | 范围                                                                                                                                                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ci.yml             | lint（5 分钟，不阻塞其它作业）；macOS 三分片并行（verify / 七日旅程 / 打包）；Windows 与 Ubuntu 的 core-cross 与打包分开；install-smoke 只 `needs` 对应平台打包产物。`concurrency` 按 workflow+ref，仅取消 PR/分支进行中的 run |
+| lmcp-workspace.yml | 固定 Browser 引用和 Core gitlink；生产扩展通过真实 Native Host 连接源码与打包 Desktop；Linux 可无头联调，Windows 插件仍人工                                                                                                    |
+| visual.yml         | 手动运行当前真实原生使用链路及明暗/窄窗截图，供人工审查；不宣称像素比较通过                                                                                                                                                    |
+| candidate.yml      | 三端矩阵构建全部安装包（mac dmg/zip、win nsis、linux AppImage+deb），真实安装验证与对应源码；三端齐套后合并 feed / SHA256SUMS 再公开 Release                                                                                   |
 
-`ci.yml` 的 desktop 作业预算为 120 分钟（Windows 打包与 Maven 更慢，75 分钟会在 core-cross 中途被取消）；L2 安装冒烟另起干净 runner，预算 30 分钟。`install-smoke` 使用 `if: ${{ !cancelled() }}`，以便矩阵名展开，并在个别 desktop 作业失败时仍尝试已上传的安装包。Windows **core-cross** 在 Core 单元测试前把工作区、TEMP 与 `java.exe` 加入 Defender 排除，并把 `TEMP`/`TMP` 指到工作区内的 `.runtime/ci-tmp`，避免实时扫描把冷词典复制拖过 Core 的 15 秒产品预算；不注入 `JAVA_TOOL_OPTIONS`（JVM 会把该变量打到 stderr，破坏 Core 启动诊断单行断言）。不修改 Core 源码或放宽该预算。**install-smoke 的 Windows 任务不排除 Defender**，并确认实时保护开启，用真实环境验证安装后首次启动。产品侧 Desktop 等待 Core 握手：POSIX 45 秒，Windows 120 秒。Windows 启动 Core 用 `javaw` 并把 stderr 落到文件，避免隐藏控制台丢掉 `DATA_IN_USE`。业务请求的 15 秒预算、单例断言和零重试策略保持不变；作业预算不代表实测耗时或远端检查已经通过。
+`ci.yml` 作业预算：lint 5 分钟，macOS / Ubuntu 各 25 分钟，Windows core-cross 20 分钟，install-smoke 10 分钟。Linux / Windows 安装冒烟不再等待 macOS。启用 npm、Maven、`.runtime/electron-cache` 与 electron-builder 缓存。Windows **core-cross** 在单元/Core 测试前把工作区、TEMP 与 `java.exe`/`javaw.exe` 加入 Defender 排除，并把 `TEMP`/`TMP` 指到工作区内的 `.runtime/ci-tmp`；不注入 `JAVA_TOOL_OPTIONS`。不修改 Core 的 15 秒产品预算。**install-smoke 的 Windows 任务不排除 Defender**，并确认实时保护开启。产品侧 Desktop 等待 Core 握手：POSIX 45 秒，Windows 120 秒。Windows 启动 Core 用 `javaw`，父进程立刻关掉 stderr 文件句柄，避免 `close` 死锁；门禁脚本超时后打印进程树。业务请求的 15 秒预算、单例断言和零重试策略保持不变；作业预算不代表实测耗时或远端检查已经通过。
 
 Core 子模块单元测试在临时空仓中让 Git 解析相对来源，覆盖 GitHub / Gitee 的 HTTPS 与 SSH 地址；随后从本地 Core 检出固定 gitlink 并核对源码。解析检查不访问网络，也不改开发者的远端或全局配置；远端是否能取得该提交仍由实际递归检出验证。
 
