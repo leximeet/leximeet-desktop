@@ -50,6 +50,7 @@ async function fixture(t) {
     "electron/services/lmcp/private-files.cjs": "private fixture",
     "electron/services/platform/private-files.cjs": "platform private fixture",
     "electron/services/platform/win32-acl.cjs": "win32 acl fixture",
+    "electron/services/platform/powershell.cjs": "powershell fixture",
     "electron/services/platform/identity.cjs": "identity fixture",
     "electron/services/platform/transport.cjs": "transport fixture",
     "electron/services/platform/app-paths.cjs": "app-paths fixture",
@@ -80,6 +81,7 @@ async function fixture(t) {
     ["services/lmcp/private-files.cjs", "electron/services/lmcp/private-files.cjs"],
     ["services/platform/private-files.cjs", "electron/services/platform/private-files.cjs"],
     ["services/platform/win32-acl.cjs", "electron/services/platform/win32-acl.cjs"],
+    ["services/platform/powershell.cjs", "electron/services/platform/powershell.cjs"],
     ["services/platform/identity.cjs", "electron/services/platform/identity.cjs"],
     ["services/platform/transport.cjs", "electron/services/platform/transport.cjs"],
   ].map(([file, source]) => {
@@ -102,6 +104,7 @@ async function fixture(t) {
     ["services/lmcp/private-files.cjs", "electron/services/lmcp/private-files.cjs"],
     ["services/platform/private-files.cjs", "electron/services/platform/private-files.cjs"],
     ["services/platform/win32-acl.cjs", "electron/services/platform/win32-acl.cjs"],
+    ["services/platform/powershell.cjs", "electron/services/platform/powershell.cjs"],
     ["services/platform/identity.cjs", "electron/services/platform/identity.cjs"],
     ["services/platform/transport.cjs", "electron/services/platform/transport.cjs"],
     ["services/platform/app-paths.cjs", "electron/services/platform/app-paths.cjs"],
@@ -127,7 +130,7 @@ test("实际包原文和来源一致，门禁只读且报告不含本机路径",
   const before = hash(fs.readFileSync(archive));
   const report = verifyPackageMaterials(f);
   assert.equal(report.status, "passed");
-  assert.equal(report.checkedFiles, 41);
+  assert.equal(report.checkedFiles, 44);
   assert.equal(hash(fs.readFileSync(archive)), before);
   assert.equal(JSON.stringify(report).includes(f.owned), false);
   assert.equal(report.runtimeDependencyBoundary.status, "passed");

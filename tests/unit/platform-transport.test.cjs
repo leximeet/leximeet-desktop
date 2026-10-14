@@ -99,7 +99,7 @@ test("管道名只用短 ASCII，避免中文用户名超长", () => {
 });
 
 test(
-  "Windows 命名管道 listen 后能收紧 DACL",
+  "Windows 命名管道 listen 后写出端点，ACL 收紧失败不拆掉管道",
   { timeout: 20000, skip: process.platform !== "win32" },
   async (t) => {
     const profileRoot = fs.mkdtempSync(path.join(os.tmpdir(), "leximeet-pipe-acl-"));

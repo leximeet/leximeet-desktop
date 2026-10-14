@@ -345,7 +345,7 @@ test("外置 Host 发布物料可独立运行，不读取 app.asar 或系统 Nod
   assert.equal((await browser.call("getWorkspace", {}, browser.authorization)).ok, true);
   const bundleRoot = path.join(f.root, "packaged-resources", "native-host");
   const bundle = JSON.parse(fs.readFileSync(path.join(bundleRoot, "bundle.json")));
-  assert.equal(bundle.files.length, 7);
+  assert.equal(bundle.files.length, 8);
   assert.equal(bundle.runtime, "electron-run-as-node");
   assert.equal(browser.stderr, "");
 });

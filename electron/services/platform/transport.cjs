@@ -121,8 +121,9 @@ async function listenTransport({
     try {
       tightenPipe(location);
     } catch (error) {
-      server.close();
-      throw new Error(`NAMED_PIPE_ACL_FAILED: ${error.message}`);
+      // Node listen 已用 readableAll/writableAll=false 排除 Everyone；
+      // Win32 再收紧失败时不能拆掉已监听管道，否则 MCP 描述符永远写不出。
+      console.error(`命名管道 ACL 收紧失败，沿用 Node 默认独占 DACL：${error.message}`);
     }
   } else {
     const names = bindName({ purpose, profileRoot, instanceId, platform });

@@ -15,6 +15,7 @@ function buildNativeHost({
     ["electron/services/lmcp/private-files.cjs", "services/lmcp/private-files.cjs"],
     ["electron/services/platform/private-files.cjs", "services/platform/private-files.cjs"],
     ["electron/services/platform/win32-acl.cjs", "services/platform/win32-acl.cjs"],
+    ["electron/services/platform/powershell.cjs", "services/platform/powershell.cjs"],
     ["electron/services/platform/identity.cjs", "services/platform/identity.cjs"],
     ["electron/services/platform/transport.cjs", "services/platform/transport.cjs"],
   ];
