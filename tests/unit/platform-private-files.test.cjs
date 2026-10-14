@@ -17,6 +17,17 @@ function workspace(t) {
   return root;
 }
 
+test("系统临时目录上的私有文件可用，不因 macOS /tmp 或 /var 前缀软链接误拒", (t) => {
+  if (process.platform === "win32") return t.skip("Windows 走 ACL，见同文件 NTFS 用例");
+  const root = workspace(t);
+  const directory = path.join(root, "secret");
+  ensurePrivateDirectory(directory);
+  const file = path.join(directory, "token.json");
+  writePrivateJson(file, { format: "leximeet.test/1", os: process.platform });
+  assert.equal(readPrivateJson(file).os, process.platform);
+  assert.doesNotThrow(() => assertPrivate(directory, { directory: true }));
+});
+
 test("POSIX 私有目录拒绝组/其他权限与符号链接", (t) => {
   if (process.platform === "win32") return t.skip("Windows 走 ACL，见同文件 NTFS 用例");
   const root = workspace(t);

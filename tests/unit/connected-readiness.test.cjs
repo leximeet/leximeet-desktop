@@ -614,6 +614,7 @@ test("Worker 清理失败或确认后崩溃必须失败，不能因ACK伪报退�
 });
 
 test("Worker 意外退出按实际上报的自有进程组收尾，保留资料且不声称焦点验证完成", async (t) => {
+  if (process.platform === "win32") return t.skip("进程组清理是 POSIX 语义，Windows 联调另验");
   const { randomUUID } = require("node:crypto");
   const directory = path.join(connectedSessionRoot(), randomUUID()),
     profileRoot = path.join(directory, "desktop");
@@ -704,7 +705,8 @@ test("--help 不读 Browser、不准备、不启动", async () => {
 
 test("正常一键入口先构建，不要求先存在 Browser .output；只有 --check 只读门禁", async () => {
   let requested;
-  await launcher.main(["--fresh", "--extension", "/private/tmp/not-built-candidate"], {
+  const extensionDir = path.resolve(os.tmpdir(), "not-built-candidate");
+  await launcher.main(["--fresh", "--extension", extensionDir], {
     checkReadiness() {
       throw new Error("不应在构建前读取候选");
     },
@@ -712,9 +714,7 @@ test("正常一键入口先构建，不要求先存在 Browser .output；只有 
       requested = value;
     },
   });
-  assert.deepEqual(requested, {
-    extensionDir: "/private/tmp/not-built-candidate",
-  });
+  assert.deepEqual(requested, { extensionDir });
 });
 
 function child(pid = 456789) {
@@ -744,10 +744,10 @@ test("等待 descriptor 有限时、先退出立即失败，完全不读取 toke
   const dir = path.join(f.directory, "native-messaging");
   fs.mkdirSync(dir, { mode: 0o700 });
   const descriptor = path.join(dir, "lmcp-uds.json");
-  fs.writeFileSync(descriptor, "not JSON: token must never be read", {
-    mode: 0o600,
-  });
+  const { writePrivateJson } = require("../../electron/services/lmcp/private-files.cjs");
+  writePrivateJson(descriptor, { note: "token must never be read" });
   assert.equal(await launcher.waitDescriptor(f.directory, child()), descriptor);
+  if (process.platform === "win32") return;
   fs.chmodSync(descriptor, 0o644);
   await assert.rejects(launcher.waitDescriptor(f.directory, child()), /权限不安全/);
 });
@@ -868,13 +868,14 @@ test("Ctrl+C 清理只使用持有的子进程组，不按名称、不删除数�
   owned.add("desktop", c);
   await owned.stop("SIGINT");
   await owned.stop("SIGINT");
-  assert.deepEqual(killed, [[-c.pid, "SIGTERM"]]);
+  assert.deepEqual(killed, [[process.platform === "win32" ? c.pid : -c.pid, "SIGTERM"]]);
   assert.equal(record.stopReason, "SIGINT");
   assert.ok(record.exitedAt);
   assert.ok(saved >= 3);
 });
 
 test("真实构建父进程已退出时仍清理其独占进程组，不遗留子工具", async (t) => {
+  if (process.platform === "win32") return t.skip("进程组清理是 POSIX 语义，Windows 联调另验");
   const script =
     "const {spawn}=require('node:child_process');const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});child.unref();console.log(child.pid);";
   const parent = spawn(process.execPath, ["-e", script], {

@@ -107,18 +107,12 @@ async function waitDescriptor(
     if (child.exitCode !== null || child.signalCode !== null || child.spawnError)
       throw new Error("Desktop 在本机通道就绪前退出；请查看本次 desktop.log");
     if (fs.existsSync(file)) {
-      for (const [candidate, directory] of [
-        [path.dirname(file), true],
-        [file, false],
-      ]) {
-        const stat = fs.lstatSync(candidate);
-        if (
-          stat.isSymbolicLink() ||
-          (directory ? !stat.isDirectory() : !stat.isFile()) ||
-          stat.mode & 0o077 ||
-          (typeof process.getuid === "function" && stat.uid !== process.getuid())
-        )
-          throw new Error("Desktop 私有 descriptor 身份或权限不安全");
+      try {
+        const { assertPrivate } = require("../electron/services/lmcp/private-files.cjs");
+        assertPrivate(path.dirname(file), { directory: true });
+        assertPrivate(file);
+      } catch {
+        throw new Error("Desktop 私有 descriptor 身份或权限不安全");
       }
       return file;
     }
@@ -276,13 +270,14 @@ class OwnedProcesses {
   signal(child, signal) {
     if (!this.alive(child) && !this.groupAlive(child)) return;
     try {
-      this.kill(-child.pid, signal);
+      this.kill(process.platform === "win32" ? child.pid : -child.pid, signal);
     } catch (error) {
       if (error.code !== "ESRCH") throw error;
     }
   }
   groupAlive(child) {
     if (!Number.isInteger(child.pid) || child.spawnError) return false;
+    if (process.platform === "win32") return this.alive(child);
     try {
       process.kill(-child.pid, 0);
       return true;

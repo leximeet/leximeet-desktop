@@ -19,7 +19,7 @@
     "build:frontend": "vite build --config frontend/vite.config.mjs",
     "build:core": "node scripts/java.cjs package",
     "build": "npm run prepare:dictionary && npm run build:frontend && npm run build:core",
-    "test:unit": "node --test --test-concurrency=2 tests/unit/*.test.cjs frontend/tests/*.test.mjs",
+    "test:unit": "node --test --test-concurrency=2 --test-timeout=120000 tests/unit/*.test.cjs frontend/tests/*.test.mjs",
     "test:core": "node scripts/java.cjs test",
     "test:e2e": "npm run test:desktop",
     "test:package": "npm run test:package:desktop",

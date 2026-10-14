@@ -4,22 +4,35 @@ const path = require("node:path");
 const { randomUUID } = require("node:crypto");
 const { protectWindowsPath, assertWindowsPrivate } = require("./win32-acl.cjs");
 
-function sameResolved(left, right) {
-  const a = path.resolve(left);
-  const b = path.resolve(right);
-  return process.platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b;
+/** macOS 把 /tmp、/var 链到 /private；这是系统前缀，不是攻击者替换。 */
+const DARWIN_SYSTEM_SYMLINKS = new Map([
+  ["/tmp", "/private/tmp"],
+  ["/var", "/private/var"],
+]);
+
+function isDarwinSystemSymlink(lexical, real) {
+  if (process.platform !== "darwin") return false;
+  const normalize = (value) => {
+    const resolved = path.resolve(value).replace(/\/$/, "");
+    return resolved || "/";
+  };
+  return DARWIN_SYSTEM_SYMLINKS.get(normalize(lexical)) === normalize(real);
 }
 
 function assertNotReparse(file) {
-  const stat = fs.lstatSync(file);
-  if (stat.isSymbolicLink()) throw new Error("UNSAFE_PRIVATE_PATH");
-  try {
-    const real = fs.realpathSync.native(file);
-    if (!sameResolved(real, file)) throw new Error("UNSAFE_PRIVATE_PATH");
-  } catch (error) {
-    if (error.message === "UNSAFE_PRIVATE_PATH") throw error;
-    // realpath 失败时仍用 lstat 结果；打开时再核对。
+  const resolved = path.resolve(file);
+  const parts = resolved.split(path.sep).filter(Boolean);
+  let cursor = process.platform === "win32" ? `${parts.shift()}${path.sep}` : path.sep;
+  for (const part of parts) {
+    cursor = path.join(cursor, part);
+    const stat = fs.lstatSync(cursor);
+    if (!stat.isSymbolicLink()) continue;
+    const real = fs.realpathSync.native(cursor);
+    if (!isDarwinSystemSymlink(cursor, real)) throw new Error("UNSAFE_PRIVATE_PATH");
+    cursor = real;
   }
+  const stat = fs.lstatSync(cursor);
+  if (stat.isSymbolicLink()) throw new Error("UNSAFE_PRIVATE_PATH");
   return stat;
 }
 
@@ -80,4 +93,10 @@ function writePrivateJson(file, value, { platform = process.platform } = {}) {
   }
 }
 
-module.exports = { assertPrivate, ensurePrivateDirectory, readPrivateJson, writePrivateJson };
+module.exports = {
+  assertPrivate,
+  ensurePrivateDirectory,
+  readPrivateJson,
+  writePrivateJson,
+  isDarwinSystemSymlink,
+};

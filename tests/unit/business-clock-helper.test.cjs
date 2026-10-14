@@ -16,6 +16,16 @@ test("测试业务时钟原子推进后新读者可见；旧句柄完整，不�
   const directory = profile(t),
     before = Date.now();
   const clock = createBusinessClock(directory);
+  if (process.platform === "win32") {
+    clock.advanceDays(3);
+    assert.equal(
+      JSON.parse(fs.readFileSync(clock.file, "utf8")).instant,
+      "2026-10-08T02:00:00.000Z",
+    );
+    assert.ok(Date.now() >= before && Date.now() - before < 5000);
+    assert.deepEqual(fs.readdirSync(path.dirname(clock.file)), ["test-clock.json"]);
+    return;
+  }
   const reader = fs.openSync(clock.file, "r");
   t.after(() => fs.closeSync(reader));
   clock.advanceDays(3);
@@ -39,6 +49,7 @@ test("拒绝倒退、错误日期和覆写既有旅程，失败保留当前有�
 });
 
 test("拒绝被替换为符号链接的测试文件，外部内容不被覆盖", (t) => {
+  if (process.platform === "win32") return t.skip("符号链接替换是 POSIX 权限语义");
   const directory = profile(t),
     clock = createBusinessClock(directory);
   const external = path.join(directory, "outside.txt");

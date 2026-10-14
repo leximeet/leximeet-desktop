@@ -13,6 +13,12 @@
 - 私有文件在 NTFS 上用 ACL 保护；Linux 系统通知与 XDG 开机自启标为尽力支持。
 - GitHub Actions 矩阵覆盖 macos-15 / windows-2025 / ubuntu-24.04；干净 runner 上走 L2 安装冒烟。发布 feed 含 `win32-x64` / `linux-x64`。
 
+### 修复
+
+- 私有路径检查允许 macOS `/tmp` → `/private/tmp`、`/var` → `/private/var` 系统前缀，不再把本机 UDS 与临时目录误判为不安全。
+- Windows / Linux 的 core-cross 门禁先准备随包 Core 词典；lint 检出 `core-java` 以便核对文档链接。
+- Windows 单元测试不再依赖 POSIX 进程组或 inode 替换；`test:unit` 为单例加上时限，避免挂死占用整次作业。
+
 ### 边界
 
 - Windows 不代码签名，发行说明写明 SmartScreen「未知发布者」。macOS 保持 ad-hoc，未公证。

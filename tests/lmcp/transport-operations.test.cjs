@@ -38,7 +38,7 @@ test("Desktop 重启保留未知反向调用，日志不存 URL、选区或 gran
   assert.equal(restored.list()[0].status, "unknown");
   assert.equal(restored.list()[0].invocationId, invocationId);
   assert(!fs.readFileSync(file, "utf8").includes("private-reading"));
-  assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+  if (process.platform !== "win32") assert.equal(fs.statSync(file).mode & 0o777, 0o600);
 });
 
 test("新 grant 可同归属查旧回执，换workspace/epoch/client禁止，跨grant不重执行", (t) => {

@@ -11,6 +11,8 @@ async function verify() {
     process.platform === "win32" ? "npm.cmd" : "npm",
   );
   require("./build-run-as-node.cjs").build({ required: process.platform === "win32" });
+  console.log("正在准备随包 Core 词典…");
+  await require("./prepare-dictionary.cjs").prepare({ edition: "core-text" });
   for (const script of [
     "verify:lmcp:contract",
     "verify:mcp:contract",
