@@ -239,6 +239,11 @@ function mainFixture(t, options = {}) {
         }
       },
     },
+    "./services/mcp/client-config.cjs": {
+      ensureLauncher() {
+        return "/tmp/leximeet-mcp";
+      },
+    },
     "./services/connection-settings.cjs": {
       ConnectionSettings: class {
         action() {
