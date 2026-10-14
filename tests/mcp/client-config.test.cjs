@@ -17,6 +17,7 @@ const {
   launcherPath,
   cursorDeeplink,
   leximeetTomlText,
+  parseTomlHeader,
 } = require("../../electron/services/mcp/client-config.cjs");
 
 function fixture(t) {
@@ -109,26 +110,81 @@ test("Codex TOML 只在 leximeet 表内判断状态与幂等", (t) => {
   assert.doesNotMatch(after, /mcp_servers\.leximeet/);
 });
 
-test("Codex 断开保留带行内注释的后续表头", (t) => {
+test("Codex TOML 表头识别注释、空白、引号键名与数组表", () => {
+  assert.deepEqual(parseTomlHeader("[mcp_servers.leximeet] # installed"), {
+    array: false,
+    keys: ["mcp_servers", "leximeet"],
+  });
+  assert.deepEqual(parseTomlHeader("  [ mcp_servers . leximeet ]  "), {
+    array: false,
+    keys: ["mcp_servers", "leximeet"],
+  });
+  assert.deepEqual(parseTomlHeader(`[mcp_servers."leximeet"]`), {
+    array: false,
+    keys: ["mcp_servers", "leximeet"],
+  });
+  assert.deepEqual(parseTomlHeader(`["mcp_servers"."leximeet"]`), {
+    array: false,
+    keys: ["mcp_servers", "leximeet"],
+  });
+  assert.deepEqual(parseTomlHeader("[[projects]] # keep"), {
+    array: true,
+    keys: ["projects"],
+  });
+  assert.deepEqual(parseTomlHeader(`["keep]me"]`), {
+    array: false,
+    keys: ["keep]me"],
+  });
+  assert.equal(parseTomlHeader("command = 1"), null);
+});
+
+test("Codex 断开保留带注释、引号键名与数组表的用户配置", (t) => {
   const f = fixture(t);
   const file = path.join(f.root, ".codex/config.toml");
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(
     file,
     [
+      "# 用户注释必须保留",
+      'model = "gpt-5"',
+      "",
       "[mcp_servers.leximeet] # installed by leximeet",
       `command = "${f.launch.command}"`,
       "",
-      "[projects.foo] # user settings",
+      "  [ projects.foo ] # user settings",
       'path = "/keep/commented"',
+      "",
+      '["quoted.key"]',
+      "value = 1",
+      "",
+      "['literal.key']",
+      "value = 2",
+      "",
+      `["keep]bracket"]`,
+      "value = 3",
+      "",
+      "[[projects]]",
+      'path = "/keep/array"',
+      "",
+      `[mcp_servers."other"]`,
+      'command = "/keep/other"',
       "",
     ].join("\n"),
   );
   removeCodex(file);
   const after = fs.readFileSync(file, "utf8");
-  assert.match(after, /\[projects\.foo\] # user settings/);
+  assert.match(after, /# 用户注释必须保留/);
+  assert.match(after, /\[ projects\.foo \] # user settings/);
   assert.match(after, /\/keep\/commented/);
+  assert.match(after, /\["quoted\.key"\]/);
+  assert.match(after, /\['literal\.key'\]/);
+  assert.match(after, /\["keep\]bracket"\]/);
+  assert.match(after, /\[\[projects\]\]/);
+  assert.match(after, /\/keep\/array/);
+  assert.match(after, /\[mcp_servers\."other"\]/);
+  assert.match(after, /\/keep\/other/);
   assert.doesNotMatch(after, /mcp_servers\.leximeet/);
+  assert.equal(leximeetTomlText(after), "");
 });
 
 test("Codex 断开不删除后续数组表", (t) => {

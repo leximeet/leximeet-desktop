@@ -114,6 +114,18 @@ test(
     });
     await waitFor(() => replies.length >= 6);
     assert.equal(replies[5].error.code, -32602);
+    send({
+      jsonrpc: "2.0",
+      id: 7,
+      method: "tools/call",
+      params: {
+        name: "leximeet_query",
+        arguments: { action: "list_encounters", args: { from: "2026-02-30" } },
+      },
+    });
+    await waitFor(() => replies.length >= 7);
+    assert.equal(replies[6].result.isError, true);
+    assert.equal(replies[6].result.structuredContent.code, "INVALID_ARGUMENT");
   },
 );
 

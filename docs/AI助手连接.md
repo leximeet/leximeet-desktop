@@ -29,7 +29,7 @@
 
 ## 一键接入如何写配置
 
-优先级：官方 CLI / deeplink → 安全写配置 → 复制命令。写入前先备份为 `.leximeet.bak.<时间>`，只保留最近 3 份；解析失败则不写；只改 `leximeet` 一个键；尽量保留注释和格式（含 TOML 表头行内注释与 `[[数组表]]`）；发现文件在写入前被改过就重试或放弃；临时文件带随机后缀再原子改名；重复接入保持幂等。
+优先级：官方 CLI / deeplink → 安全写配置 → 复制命令。写入前先备份为 `.leximeet.bak.<时间>`，只保留最近 3 份；解析失败则不写；只改 `leximeet` 一个键；尽量保留注释和格式（TOML 表头含行尾注释、空白、引号键名与 `[[数组表]]`）；发现文件在写入前被改过就重试或放弃；临时文件带随机后缀再原子改名；重复接入保持幂等。
 
 三家客户端都只配置 **一条稳定启动脚本** 的绝对路径（macOS 为 `~/Library/Application Support/LexiMeet/mcp/leximeet-mcp`）。脚本内容仿 Native Host：`export ELECTRON_RUN_AS_NODE=1` 后 `exec` 随包 Electron 与 shim。`--run-as-node` 不是有效参数，不会写入配置。应用升级或移动后会重写脚本，用户配置不用改。
 

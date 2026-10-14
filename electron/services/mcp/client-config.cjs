@@ -197,22 +197,83 @@ function renderCodexTable(launch) {
   ].join("\n");
 }
 
+function readTomlKey(source, start) {
+  const quote = source[start];
+  if (quote === '"' || quote === "'") {
+    let text = "";
+    let escape = false;
+    for (let i = start + 1; i < source.length; i++) {
+      const ch = source[i];
+      if (quote === '"' && escape) {
+        text += ch;
+        escape = false;
+        continue;
+      }
+      if (quote === '"' && ch === "\\") {
+        escape = true;
+        continue;
+      }
+      if (ch === quote) return { value: text, next: i + 1 };
+      text += ch;
+    }
+    return null;
+  }
+  const match = /^[A-Za-z0-9_-]+/.exec(source.slice(start));
+  return match ? { value: match[0], next: start + match[0].length } : null;
+}
+
+function skipTomlSpace(source, start) {
+  let i = start;
+  while (source[i] === " " || source[i] === "\t") i++;
+  return i;
+}
+
+/** 解析 TOML 表头：空白、行尾注释、引号键名、[[数组表]]。 */
+function parseTomlHeader(line) {
+  const text = String(line);
+  let i = skipTomlSpace(text, 0);
+  if (text[i] !== "[") return null;
+  const array = text[i + 1] === "[";
+  i += array ? 2 : 1;
+  const keys = [];
+  while (true) {
+    i = skipTomlSpace(text, i);
+    const key = readTomlKey(text, i);
+    if (!key) return null;
+    keys.push(key.value);
+    i = skipTomlSpace(text, key.next);
+    if (text[i] === ".") {
+      i += 1;
+      continue;
+    }
+    break;
+  }
+  if (array) {
+    if (text[i] !== "]" || text[i + 1] !== "]") return null;
+    i += 2;
+  } else if (text[i] === "]") i += 1;
+  else return null;
+  i = skipTomlSpace(text, i);
+  if (i < text.length && text[i] !== "#") return null;
+  return keys.length ? { array, keys } : null;
+}
+
+function isLeximeetTomlTable(header, name) {
+  return header && !header.array && header.keys[0] === "mcp_servers" && header.keys[1] === name;
+}
+
 function findTomlTables(source, name) {
   const lines = source.split(/\r?\n/);
   const ranges = [];
   let start = -1;
-  // TOML 允许表头行尾注释，如 `[projects.foo] # user settings`。
-  const header = new RegExp(`^\\s*\\[mcp_servers\\.${name}(?:\\.[^\\]]+)?\\]\\s*(?:#.*)?$`);
-  // 普通表 [a] 与数组表 [[a]] 都是新表起点，避免把后续用户配置算进 leximeet。
-  const other = /^\s*\[{1,2}[^\]]+\]{1,2}\s*(?:#.*)?$/;
   for (let i = 0; i <= lines.length; i++) {
-    const line = lines[i] || "";
-    if (i === lines.length || other.test(line)) {
+    const header = i < lines.length ? parseTomlHeader(lines[i]) : null;
+    if (i === lines.length || header) {
       if (start >= 0) {
         ranges.push([start, i]);
         start = -1;
       }
-      if (i < lines.length && header.test(line)) start = i;
+      if (isLeximeetTomlTable(header, name)) start = i;
     }
   }
   return { lines, ranges };
@@ -421,5 +482,6 @@ module.exports = {
   cursorDeeplink,
   commandOnPath,
   findTomlTables,
+  parseTomlHeader,
   leximeetTomlText,
 };

@@ -14,14 +14,14 @@
 
 - MCP stdio 按官方规范改为换行分隔 JSON，不再使用 LSP 的 Content-Length。
 - 设置页「测试连接」不再误校验 clientId。
-- Codex TOML 写入/断开识别 `[[数组表]]` 以及表头行内注释（如 `[projects.foo] # user settings`），不再删掉 leximeet 之后的用户配置。
+- Codex TOML 写入/断开按真正表头解析：行尾注释、前后空白、引号键名与 `[[数组表]]`，不再删掉 leximeet 之后的用户配置。
 - 去掉无效的 `--run-as-node`；三家客户端只配置稳定启动脚本，由脚本导出 `ELECTRON_RUN_AS_NODE` 再 exec Electron。
 - 桌面未开时 `initialize` 仍成功，工具调用才返回 `DESKTOP_NOT_RUNNING`。残留的陈旧 UDS 拒绝连接时同样走本地握手，不再挂起客户端。
 - Cursor 安装链接按官方文档对 `name`/`config` 做 `encodeURIComponent`；Codex CLI 接入后补写 `default_tools_approval_mode = "writes"`。
 
 ### 维护
 
-- Core `core-java` gitlink 同步到公开提交 `df9e93a`（通知静默、协议 2025-06-18、未知工具 -32602、只限流 tools/call、列表缩页 nextCursor）。
+- Core `core-java` gitlink 同步到公开提交 `a98afa8`（通知静默、协议 2025-06-18、未知工具 -32602、只限流 tools/call、列表缩页、非法日期 `INVALID_ARGUMENT`、mutation 回执按 clientId+指纹隔离）。
 - 删除误提交的 `git-commit-message.txt`。
 - 同步 Core 已公开 1.0.0 的首页与验收文档，明确首版测试库与后续正式资料兼容的边界；原发行标签、程序与附件来源保持不变。
 - Core 子模块同步发行文档维护提交，修正 Release 阅读入口；已公开安装物的来源仍由原标签和发行清单记录。
