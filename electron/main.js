@@ -30,6 +30,8 @@ const { resolveProfile } = require("./services/profiles.cjs");
 const { JavaRuntime } = require("./services/java-runtime.cjs");
 const { LmcpGateway } = require("./services/lmcp/gateway.cjs");
 const { ConnectionSettings } = require("./services/connection-settings.cjs");
+const { McpGateway } = require("./services/mcp/gateway.cjs");
+const { AssistantSettings } = require("./services/mcp/settings.cjs");
 const { PluginCaptureNotifications } = require("./services/plugin-capture-notifications.cjs");
 const { BrowserDiscovery } = require("./services/browser-discovery.cjs");
 const { ConnectionNotifications } = require("./services/connection-notifications.cjs");
@@ -281,6 +283,23 @@ const connectionSettings = new ConnectionSettings({
   homeDir: app.getPath("home"),
   discoveryStatus: () => browserDiscovery.snapshot(),
 });
+const mcpGateway = new McpGateway({
+  core,
+  profile,
+  awaitReady: () => ready,
+  homeDir: app.getPath("home"),
+});
+const assistantSettings = new AssistantSettings({
+  core,
+  gateway: mcpGateway,
+  profile,
+  electronExecutable: process.execPath,
+  shimPath: app.isPackaged
+    ? path.join(process.resourcesPath, "mcp-host", "host", "main.cjs")
+    : path.join(projectDir, "electron", "mcp-host", "main.cjs"),
+  homeDir: app.getPath("home"),
+  openExternal: (url) => shell.openExternal(url),
+});
 const browserDiscovery = new BrowserDiscovery({
   profile,
   homeDir: app.getPath("home"),
@@ -319,6 +338,7 @@ bridge.connectionSettings = async (input) => {
   notifyChanged();
   return result;
 };
+bridge.assistantSettings = (input) => assistantSettings.action(input);
 textDictionary = new TextDictionaryService({
   core,
   profile,
@@ -483,6 +503,9 @@ egg.register("electron-app-ready", () => {
   connector.start().catch(() => {
     // 状态页显示失败，不能误报已连接。
   });
+  mcpGateway.start().catch(() => {
+    // AI 助手连接页显示失败，不自动拉起客户端。
+  });
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       ...(process.platform === "darwin"
@@ -575,7 +598,7 @@ app.on("before-quit", (event) => {
   browserDiscovery.close();
   connectionNotifications.close();
   pluginCaptureNotifications.close();
-  Promise.allSettled([connector.close(), textDictionary?.close()])
+  Promise.allSettled([connector.close(), mcpGateway.close(), textDictionary?.close()])
     .then(() => core.stop())
     .finally(() => {
       shutdownFinished = true;

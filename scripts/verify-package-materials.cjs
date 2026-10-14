@@ -145,6 +145,27 @@ function verifyPackageMaterials({ projectDir, resourcesDir }) {
     if (checked.at(-1).sha256 !== file.sha256)
       throw new Error("Native Host 原文件与清单摘要不一致");
   }
+  const mcp = JSON.parse(readWithin(resourcesDir, "mcp-host/bundle.json"));
+  const mcpSources = {
+    "host/main.cjs": "electron/mcp-host/main.cjs",
+    "services/mcp/stdio-framing.cjs": "electron/services/mcp/stdio-framing.cjs",
+    "services/lmcp/framing.cjs": "electron/services/lmcp/framing.cjs",
+    "services/lmcp/private-files.cjs": "electron/services/lmcp/private-files.cjs",
+  };
+  if (
+    mcp.format !== "leximeet.mcp-host-bundle/1" ||
+    mcp.entry !== "host/main.cjs" ||
+    mcp.files?.length !== 4
+  )
+    throw new Error("MCP Host 清单不是固定四项物料");
+  const mcpSeen = new Set();
+  for (const file of mcp.files) {
+    if (!mcpSources[file.path] || mcpSeen.has(file.path))
+      throw new Error("MCP Host 清单重复或越界");
+    mcpSeen.add(file.path);
+    compare(`mcp-host/${file.path}`, mcpSources[file.path]);
+    if (checked.at(-1).sha256 !== file.sha256) throw new Error("MCP Host 原文件与清单摘要不一致");
+  }
   return {
     status: "passed",
     checkedFiles: checked.length,

@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from "vue";
 import { api } from "../lib/api.js";
 import CardLayoutSettings from "../components/CardLayoutSettings.vue";
 import ConnectionSettings from "./ConnectionSettings.vue";
+import AssistantSettings from "./AssistantSettings.vue";
 import ReminderSettings from "./ReminderSettings.vue";
 import Icon from "../components/Icon.vue";
 import { GUIDE_STEPS, currentGuideStep } from "./guide-steps.js";
@@ -64,6 +65,7 @@ const sections = [
   ["audio", "发音", "volume"],
   ["capture", "采集与快捷键", "keyboard"],
   ["connection", "插件连接", "plug-connected"],
+  ["assistant", "AI 助手连接", "code"],
   ["data", "本机数据", "folder"],
   ["teaching", "使用教学", "info-circle"],
   ["about", "关于词遇", "book-2"],
@@ -429,6 +431,7 @@ async function appearance(patch) {
           </button>
         </section>
         <ConnectionSettings v-if="panel === 'connection'" />
+        <AssistantSettings v-if="panel === 'assistant'" />
         <section class="settings-section" v-show="panel === 'data'">
           <h2>本机数据</h2>
           <button class="button" @click="native('showDataFolder')"> 打开资料目录 </button>

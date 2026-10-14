@@ -21,11 +21,13 @@ async function verify() {
   // Core 的 clean test 会删除运行 jar；测试通过后再打包，保证集成与 UI 使用刚测试的源码。
   for (const script of [
     "verify:lmcp:contract",
+    "verify:mcp:contract",
     "test:unit",
     "test:core",
     "build:core",
     "test:integration",
     "test:lmcp:transport",
+    "test:mcp",
     "test:desktop",
   ]) {
     console.log(`\n正在验证 ${script}…`);

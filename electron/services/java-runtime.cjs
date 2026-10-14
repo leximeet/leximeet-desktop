@@ -341,6 +341,7 @@ class JavaRuntime {
 // LMCP 查询与写入有不同的有界预算；超时不表示回滚，写入须查询原回执。
 function requestBudget(route, body) {
   if (["/api/import", "/api/export", "/api/snapshot"].includes(route)) return 90000;
+  if (route === "/api/mcp") return 15000;
   if (route !== "/api/lmcp/rpc") return 15000;
   const method = body?.envelope?.method;
   return ["recordEncounter", "openInDesktop"].includes(method) ? 15000 : 5000;

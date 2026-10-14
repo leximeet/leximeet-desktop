@@ -85,6 +85,7 @@ Actions 固定到完整 SHA，检查和构建任务使用只读凭据，只有�
 | Desktop 单元       | 当前入口闭包、命名合同、异步草稿、练习确认、隐私、物料负例  | `npm run test:unit`                                         |
 | Core               | 当前 SQLite 结构、真实事务、积分/FSRS、备份、身份与拒旧入口 | `core-java/target/surefire-reports`                         |
 | HTTP / Native Host | 真实子进程、鉴权、传输、失败清理                            | `test:integration` / `test:lmcp:transport`                  |
+| AI 助手连接        | 路由/权限/参数、配置写入、schema 快照、shim、无密钥与畸形帧 | `verify:mcp:contract` / `test:mcp`                          |
 | 完整原生 UI        | 新装、教学、六方式、重启、词库、Full 切换与明暗窄窗         | `test-results/desktop-001`                                  |
 | 七天使用           | 业务时钟、学三休一再学三、模式切换、笔记、提醒与恢复        | `test-results/daily-journey`                                |
 | 源码双端           | 生产扩展、实际侧栏/浮球、连接归属、采集去重与回执           | `test-results/connected-real-browser`                       |
@@ -111,7 +112,7 @@ Actions 固定到完整 SHA，检查和构建任务使用只读凭据，只有�
 
 ## 当前正式规范的本机复验
 
-当前 Desktop/Core 消费 LMCP `1.0.0` 的正式 note-only 规范，来源记录见随仓的 `resources/lmcp/source.json`，摘要 `61a44cc2f7f73fef81b007c844e1f2fa4deb955bf21a69236ee7b4f713808c49`。Core 固定于本仓 `core-java` gitlink 的正式提交。构建门禁逐字节验证 17 项规范，业务测试同时拒绝旧字段，包括空值。
+当前 Desktop/Core 消费 LMCP `1.0.0` 的正式 note-only 规范，来源记录见随仓的 `resources/lmcp/source.json`，摘要 `61a44cc2f7f73fef81b007c844e1f2fa4deb955bf21a69236ee7b4f713808c49`。1.0.1 另增加 AI 助手连接（MCP），工具快照在 `resources/mcp/tools-snapshot.json`；LMCP 规范本身仍冻结为 1.0.0。Core 固定于本仓 `core-java` gitlink 的对应提交。构建门禁逐字节验证 17 项 LMCP 规范，业务测试同时拒绝旧字段，包括空值。`scripts/test-desktop.sh --verify` 与 `ci.yml` 已接入 `verify:mcp:contract` 与 `test:mcp`。
 
 2026-10-05 本机复验已通过 Core 174 项/40 套、真实 Core 管理器 9 项、参考 Native Host 传输 47 项、原生 Electron UI 56 项、七天使用 7 项，均零失败、零跳过、零自动重试。Desktop 单元与物料边界检查共 326 项。生产依赖审计为零已知漏洞；完整构建依赖的一项已知问题及约束见[安全与许可](安全与许可.md)。最终应用包的来源、字节数、SHA-256、实际安装和隔离回收结果由 `release:local` 生成的 `BUILD-MANIFEST.json` 与报告记录，不能把上方旧包的字节数视为本次产物。
 

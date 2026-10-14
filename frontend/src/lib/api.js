@@ -16,6 +16,7 @@ const METHODS = new Set([
   "diagnostics",
   "desktopAction",
   "connectionSettings",
+  "assistantSettings",
   "openExternal",
 ]);
 
