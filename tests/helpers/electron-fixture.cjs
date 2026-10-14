@@ -211,13 +211,26 @@ function createDesktopFactory(testInfo) {
         .windows()
         .find((candidate) => /\/frontend\/dist\/index\.html(?:$|[?#])/.test(candidate.url()));
       session.page = page;
-      session.mainWindowId = await app.evaluate(({ BrowserWindow }, url) => {
-        const windows = BrowserWindow.getAllWindows().filter(
-          (window) => window.webContents.getURL() === url,
-        );
-        if (windows.length !== 1) throw new Error("无法唯一绑定当前业务主窗口");
-        return windows[0].id;
-      }, page.url());
+      const pageUrl = page.url();
+      await expect
+        .poll(
+          async () => {
+            session.mainWindowId = await app.evaluate(({ BrowserWindow }, url) => {
+              const normalize = (value) =>
+                String(value || "")
+                  .replace(/\\/g, "/")
+                  .split(/[?#]/)[0];
+              const wanted = normalize(url);
+              const windows = BrowserWindow.getAllWindows().filter(
+                (window) => normalize(window.webContents.getURL()) === wanted,
+              );
+              return windows.length === 1 ? windows[0].id : 0;
+            }, pageUrl);
+            return session.mainWindowId;
+          },
+          { timeout: 5000 },
+        )
+        .toBeGreaterThan(0);
       page.setDefaultTimeout(15000);
       if (skipSnapshot) {
         await page.waitForFunction(

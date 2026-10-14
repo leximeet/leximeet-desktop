@@ -182,10 +182,10 @@
         "deb"
       ],
       "category": "Education",
-      "executableName": "leximeet",
-      "packageName": "leximeet"
+      "executableName": "leximeet"
     },
     "deb": {
+      "packageName": "leximeet",
       "afterInstall": null,
       "afterRemove": null
     },

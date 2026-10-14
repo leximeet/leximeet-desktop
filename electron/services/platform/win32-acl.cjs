@@ -1,4 +1,5 @@
 "use strict";
+const fs = require("node:fs");
 const { execFileSync } = require("node:child_process");
 const { currentWindowsAccount, currentWindowsSid } = require("./identity.cjs");
 
@@ -26,7 +27,10 @@ function runIcacls(args, { timeout = 15000 } = {}) {
 function protectWindowsPath(target) {
   if (process.platform !== "win32") return target;
   const account = currentWindowsAccount();
-  runIcacls([target, "/inheritance:r", "/grant:r", `${account}:(OI)(CI)(F)`, "/Q"]);
+  const directory = fs.lstatSync(target).isDirectory();
+  // 目录带 (OI)(CI) 让子项继承；文件只能 (F)，否则 icacls 不写入当前用户 ACE。
+  const grant = `${account}:${directory ? "(OI)(CI)(F)" : "(F)"}`;
+  runIcacls([target, "/inheritance:r", "/grant:r", grant, "/Q"]);
   for (const group of [
     "Everyone",
     "Users",
@@ -57,8 +61,12 @@ function assertWindowsPrivate(target) {
   }
   const sid = currentWindowsSid();
   const account = currentWindowsAccount();
+  const accountTail = account.split("\\").pop();
+  const listingLower = listing.toLowerCase();
   const ownerOk =
-    listing.toLowerCase().includes(account.toLowerCase()) || (sid && listing.includes(sid));
+    listingLower.includes(account.toLowerCase()) ||
+    (accountTail && listingLower.includes(accountTail.toLowerCase())) ||
+    (sid && listing.includes(sid));
   if (!ownerOk) throw new Error("UNSAFE_PRIVATE_PATH");
 }
 

@@ -73,21 +73,23 @@ function verifyPackageMaterials({ projectDir, resourcesDir }) {
   };
   const archive = path.join(resourcesDir, "app.asar");
   assertRuntimeDependencyBoundary(archive);
+  const asarKeyByPosix = new Map();
+  const toPosix = (entry) => entry.replace(/\\/g, "/").replace(/^\/+/, "");
+  const toExtractKey = (entry) => entry.replace(/^[/\\]+/, "");
+  for (const entry of listPackage(archive)) asarKeyByPosix.set(toPosix(entry), toExtractKey(entry));
   const fromAsar = (file) => () => {
-    const posix = file.replace(/\\/g, "/");
-    try {
-      return extractFile(archive, posix, false);
-    } catch (error) {
-      const win = posix.replace(/\//g, "\\");
-      if (win !== posix) {
-        try {
-          return extractFile(archive, win, false);
-        } catch {
-          /* 继续抛出 posix 路径的原始错误 */
-        }
+    const posix = toPosix(file);
+    const mapped = asarKeyByPosix.get(posix);
+    const candidates = [mapped, posix, posix.replace(/\//g, "\\")].filter(Boolean);
+    let lastError;
+    for (const key of [...new Set(candidates)]) {
+      try {
+        return extractFile(archive, key, false);
+      } catch (error) {
+        lastError = error;
       }
-      throw error;
     }
+    throw lastError || new Error(`缺少物料原文：${posix}`);
   };
   for (const file of ["LICENSE", "frontend/src/assets/audio/NOTICE.md"])
     compare(`app.asar/${file}`, file, fromAsar(file));

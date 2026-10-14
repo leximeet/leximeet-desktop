@@ -21,6 +21,7 @@
 - Windows 路径断言、NTFS 权限、`whoami.exe` 与 ASAR 正斜杠抽取与本机语义对齐；非 macOS 不再要求系统焦点监测 complete。
 - 隔离目录回收在 Windows 上检查 NTFS ACL（拒绝 Everyone / Users / Authenticated Users），不再把缺少 POSIX 0o077 当成放行。
 - 停止本轮进程在 Windows 用 `taskkill /T`、macOS 按 PID 与子进程、Linux 仍用进程组；各平台都有「停止后子进程确实退出」的真实进程测试。
+- NTFS 收紧时目录用 `(OI)(CI)(F)`、文件只用 `(F)`，避免私有 JSON 写失败。Linux 的 `packageName` 放到 `deb`，符合 electron-builder 26 的 schema。
 
 ### 边界
 
