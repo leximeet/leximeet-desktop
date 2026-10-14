@@ -18,6 +18,7 @@ const {
   cursorDeeplink,
   leximeetTomlText,
   parseTomlHeader,
+  paths,
 } = require("../../electron/services/mcp/client-config.cjs");
 
 function fixture(t) {
@@ -318,4 +319,23 @@ test("Codex CLI 接入后补写 writes 批准且只配启动脚本", (t) => {
   assert.doesNotMatch(text, /--run-as-node/);
   assert.match(result.copyCommand, /codex mcp add leximeet -- /);
   assert.doesNotMatch(result.copyCommand, /--run-as-node/);
+});
+
+test("只写官方 ~/.codex/config.toml，不认 CODEX_HOME", (t) => {
+  const f = fixture(t);
+  process.env.CODEX_HOME = path.join(f.root, "custom-codex");
+  t.after(() => {
+    delete process.env.CODEX_HOME;
+  });
+  assert.equal(paths(f.root).codex, path.join(f.root, ".codex", "config.toml"));
+});
+
+test("Windows 一键接入写入 .exe 启动器而非 .cmd", (t) => {
+  const f = fixture(t);
+  const stub = path.join(f.root, "stub.exe");
+  fs.writeFileSync(stub, "MZ");
+  const launch = launchConfig(f.electron, f.shim, f.root, { platform: "win32", stubPath: stub });
+  assert.equal(path.extname(launch.command), ".exe");
+  assert.equal(fs.existsSync(`${launch.command}.cmd`), false);
+  assert.match(fs.readFileSync(`${launch.command}.launch`, "utf8"), /electron=/);
 });

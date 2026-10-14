@@ -35,7 +35,8 @@ class StudyNotifications {
     this.status = { state: "ready", message: "" };
   }
   supportedModes() {
-    if (!this.Notification.isSupported() || !["darwin", "win32"].includes(this.platform)) return [];
+    if (!this.Notification.isSupported() || !["darwin", "win32", "linux"].includes(this.platform))
+      return [];
     return Object.keys(LABELS).filter((mode) => mode !== "listening" || Boolean(this.play));
   }
   async issue() {

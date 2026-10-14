@@ -1,6 +1,6 @@
 {
   "name": "leximeet-desktop",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "词遇-LexiMeet：在语境里遇见，在记忆里重逢。",
   "private": true,
   "license": "AGPL-3.0-only",
@@ -53,6 +53,9 @@
     "test:package:desktop": "playwright test --config playwright.desktop-package.config.cjs",
     "test:lmcp:transport": "node --test --test-concurrency=1 tests/lmcp/transport-*.test.cjs",
     "test:mcp": "node --test --test-concurrency=1 tests/mcp/*.test.cjs",
+    "test:install-smoke": "node scripts/install-smoke.cjs",
+    "verify:cross": "node scripts/verify-cross.cjs",
+    "build:stub": "node scripts/build-run-as-node.cjs",
     "verify:lmcp:contract": "node scripts/lmcp/verify-contract.cjs",
     "verify:mcp:contract": "node scripts/mcp/verify-contract.cjs",
     "build:mcp-host": "node scripts/mcp/build-host.cjs",
@@ -164,13 +167,27 @@
     },
     "win": {
       "icon": "resources/brand/LexiMeet.ico",
-      "target": "nsis"
+      "target": "nsis",
+      "extraResources": [
+        {
+          "from": "resources/native/leximeet-run-as-node.exe",
+          "to": "native/leximeet-run-as-node.exe"
+        }
+      ]
     },
     "linux": {
       "icon": "resources/brand/icon-512x512.png",
-      "target": "AppImage",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "Education",
-      "executableName": "leximeet"
+      "executableName": "leximeet",
+      "packageName": "leximeet"
+    },
+    "deb": {
+      "afterInstall": null,
+      "afterRemove": null
     },
     "nsis": {
       "oneClick": false,

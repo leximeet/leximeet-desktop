@@ -34,9 +34,12 @@ async function fixture(
 test("描述符不含 Core 令牌，错误令牌被拒绝", async (t) => {
   const { gateway } = await fixture(t);
   const descriptor = readPrivateJson(gateway.descriptorPath);
-  assert.equal(descriptor.format, "leximeet.mcp-uds/1");
+  assert.equal(descriptor.format, "leximeet.mcp-transport/1");
+  assert.equal(descriptor.kind, process.platform === "win32" ? "named-pipe" : "uds");
+  if (descriptor.kind === "uds") assert.equal(descriptor.path, descriptor.socketPath);
+  else assert.match(descriptor.path, /^\\\\[.]\\pipe\\leximeet-mcp-/i);
   assert.doesNotMatch(JSON.stringify(descriptor), /Bearer|127\.0\.0\.1/);
-  const socket = net.connect(descriptor.socketPath);
+  const socket = net.connect(descriptor.path || descriptor.socketPath);
   const decoder = new FrameDecoder();
   const inbox = [];
   decoder.on("message", (message) => inbox.push(message));
@@ -50,7 +53,7 @@ test("描述符不含 Core 令牌，错误令牌被拒绝", async (t) => {
 
 async function authedSession(gateway, clientId = "cursor") {
   const descriptor = readPrivateJson(gateway.descriptorPath);
-  const socket = net.connect(descriptor.socketPath);
+  const socket = net.connect(descriptor.path || descriptor.socketPath);
   const decoder = new FrameDecoder();
   const inbox = [];
   decoder.on("message", (message) => inbox.push(message));
@@ -131,7 +134,7 @@ test("畸形帧断开且不转发到 Core", async (t) => {
     return { message: { jsonrpc: "2.0", id: 1, result: {} } };
   });
   const descriptor = readPrivateJson(gateway.descriptorPath);
-  const socket = net.connect(descriptor.socketPath);
+  const socket = net.connect(descriptor.path || descriptor.socketPath);
   await new Promise((resolve) => socket.once("connect", resolve));
   socket.write(Buffer.from("not-a-frame"));
   await new Promise((resolve) => socket.once("close", resolve));

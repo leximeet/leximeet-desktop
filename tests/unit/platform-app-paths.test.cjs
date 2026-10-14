@@ -1,0 +1,77 @@
+"use strict";
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const path = require("node:path");
+const {
+  appDataRoot,
+  mcpDir,
+  mcpPointerPath,
+  mcpLauncherPath,
+  browserUserDataDir,
+  nativeMessagingHostsDir,
+  xdgAutostartDir,
+} = require("../../electron/services/platform/app-paths.cjs");
+
+const HOME = path.resolve("/tmp/leximeet-home-demo");
+const WIN_HOME = path.resolve("/tmp/leximeet-win-home");
+const WIN_APPDATA = path.resolve("/tmp/leximeet-roaming");
+const WIN_LOCAL = path.resolve("/tmp/leximeet-local");
+
+test("资料与 MCP 指针按平台落到 appData，不把 Windows 写成 ~/.config", () => {
+  assert.equal(
+    appDataRoot({ homeDir: HOME, platform: "darwin" }),
+    path.join(HOME, "Library", "Application Support", "LexiMeet"),
+  );
+  assert.equal(
+    appDataRoot({ homeDir: WIN_HOME, platform: "win32", env: { APPDATA: WIN_APPDATA } }),
+    path.join(WIN_APPDATA, "LexiMeet"),
+  );
+  assert.equal(
+    appDataRoot({ homeDir: HOME, platform: "linux", env: {} }),
+    path.join(HOME, ".config", "LexiMeet"),
+  );
+  assert.equal(
+    mcpPointerPath({ homeDir: WIN_HOME, platform: "win32", env: { APPDATA: WIN_APPDATA } }),
+    path.join(WIN_APPDATA, "LexiMeet", "mcp", "current.json"),
+  );
+  assert.equal(
+    mcpLauncherPath({ homeDir: WIN_HOME, platform: "win32", env: { APPDATA: WIN_APPDATA } }),
+    path.join(WIN_APPDATA, "LexiMeet", "mcp", "leximeet-mcp.exe"),
+  );
+  assert.equal(
+    mcpLauncherPath({ homeDir: HOME, platform: "linux", env: {} }),
+    path.join(HOME, ".config", "LexiMeet", "mcp", "leximeet-mcp"),
+  );
+  assert.equal(path.basename(mcpDir({ homeDir: HOME, platform: "darwin" })), "mcp");
+});
+
+test("Chrome / Edge 用户资料根覆盖三端官方默认位置", () => {
+  assert.equal(
+    browserUserDataDir("chrome", { homeDir: HOME, platform: "darwin" }),
+    path.join(HOME, "Library", "Application Support", "Google/Chrome"),
+  );
+  assert.equal(
+    browserUserDataDir("edge", {
+      homeDir: WIN_HOME,
+      platform: "win32",
+      env: { LOCALAPPDATA: WIN_LOCAL },
+    }),
+    path.join(WIN_LOCAL, "Microsoft/Edge/User Data"),
+  );
+  assert.equal(
+    browserUserDataDir("chrome", { homeDir: HOME, platform: "linux", env: {} }),
+    path.join(HOME, ".config", "google-chrome"),
+  );
+  assert.equal(
+    nativeMessagingHostsDir("chrome", { homeDir: HOME, platform: "linux", env: {} }),
+    path.join(HOME, ".config", "google-chrome", "NativeMessagingHosts"),
+  );
+  assert.throws(
+    () => browserUserDataDir("firefox", { homeDir: HOME, platform: "darwin" }),
+    /UNSUPPORTED/,
+  );
+  assert.equal(
+    xdgAutostartDir({ homeDir: HOME, env: {} }),
+    path.join(HOME, ".config", "autostart"),
+  );
+});

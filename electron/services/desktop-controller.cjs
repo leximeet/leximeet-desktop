@@ -1,4 +1,5 @@
 const path = require("node:path");
+const { setLinuxAutostart, linuxAutostartEnabled } = require("./platform/autostart.cjs");
 
 const available = () => ({ status: "available" });
 const unavailable = (reason) => ({ status: "not-configured", reason });
@@ -18,6 +19,8 @@ class DesktopController {
     capture,
     archive,
     fileBackupsEnabled = true,
+    homeDir,
+    executablePath,
   }) {
     Object.assign(this, {
       app,
@@ -32,13 +35,15 @@ class DesktopController {
       capture,
       archive,
       fileBackupsEnabled,
+      homeDir,
+      executablePath,
     });
     this.settings = { closeBehavior: "platform", launchAtLogin: false };
     this.tray = null;
   }
   capabilities() {
     const login =
-      ["darwin", "win32"].includes(this.platform) &&
+      ["darwin", "win32", "linux"].includes(this.platform) &&
       this.app.isPackaged &&
       this.profile.name === "local";
     const updates = this.updater?.configured()
@@ -66,7 +71,8 @@ class DesktopController {
         ? available()
         : {
             status: "unsupported",
-            reason: "仅正式安装的 macOS / Windows 应用可设置；开发和验收环境不修改系统登录项",
+            reason:
+              "仅正式安装的应用可设置；Linux 为尽力写入 XDG autostart，开发和验收环境不修改登录项",
           },
       account: unavailable("账号服务尚未配置，本机资料可以独立使用"),
       cloudSync: unavailable("云同步尚未接入，不上传本机资料"),
@@ -98,12 +104,21 @@ class DesktopController {
       changedKeys.includes("launchAtLogin") &&
       this.capabilities().launchAtLogin.status === "available"
     ) {
-      this.app.setLoginItemSettings({
-        openAtLogin: settings.launchAtLogin === true,
-      });
-      const actual = this.app.getLoginItemSettings();
-      if (Boolean(actual.openAtLogin) !== (settings.launchAtLogin === true))
-        throw new Error("系统登录启动状态与所选设置不一致，请检查系统设置后重试");
+      if (this.platform === "linux") {
+        const result = setLinuxAutostart(settings.launchAtLogin === true, {
+          homeDir: this.homeDir,
+          executable: this.executablePath || this.app.getPath("exe"),
+        });
+        if (Boolean(result.enabled) !== (settings.launchAtLogin === true) && settings.launchAtLogin)
+          throw new Error("未能写入 Linux 开机自启项；可在系统设置中手动添加");
+      } else {
+        this.app.setLoginItemSettings({
+          openAtLogin: settings.launchAtLogin === true,
+        });
+        const actual = this.app.getLoginItemSettings();
+        if (Boolean(actual.openAtLogin) !== (settings.launchAtLogin === true))
+          throw new Error("系统登录启动状态与所选设置不一致，请检查系统设置后重试");
+      }
     }
     this.settings = { ...settings };
     this.capture?.apply(settings);
@@ -120,11 +135,17 @@ class DesktopController {
     const action = payload.action;
     switch (action) {
       case "openNotificationSettings":
-        if (this.platform !== "darwin") throw new Error("请在系统设置中管理通知权限");
-        await this.shell.openExternal(
-          "x-apple.systempreferences:com.apple.Notifications-Settings.extension",
-        );
-        return { ok: true, action };
+        if (this.platform === "darwin") {
+          await this.shell.openExternal(
+            "x-apple.systempreferences:com.apple.Notifications-Settings.extension",
+          );
+          return { ok: true, action };
+        }
+        if (this.platform === "win32") {
+          await this.shell.openExternal("ms-settings:notifications");
+          return { ok: true, action };
+        }
+        throw new Error("请在系统设置中管理通知权限（Linux 各桌面环境入口不同，本版不深链）");
       case "exportArchive":
         if (!this.fileBackupsEnabled) throw new Error(this.capabilities().fileBackups.reason);
         if (!this.archive) throw new Error("当前环境不能导出完整文件备份");

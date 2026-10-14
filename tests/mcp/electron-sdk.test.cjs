@@ -46,16 +46,23 @@ test(
       electronExecutable: electron,
       shimPath: shim,
       env: { PATH: bin },
-      preferCli: true,
+      preferCli: process.platform !== "win32",
+      projectDir: path.resolve(__dirname, "../.."),
     });
-    assert.equal(cli.method, "cli");
+    if (process.platform !== "win32") assert.equal(cli.method, "cli");
     const written = JSON.parse(fs.readFileSync(claudeConfig, "utf8"));
     assert.equal(written.mcpServers.leximeet.command, launch.command);
     assert.deepEqual(written.mcpServers.leximeet.args, []);
     assert.equal(written.mcpServers.leximeet.env, undefined);
-    const script = fs.readFileSync(launch.command, "utf8");
-    assert.match(script, /export ELECTRON_RUN_AS_NODE=1/);
-    assert.doesNotMatch(script, /--run-as-node/);
+    if (process.platform === "win32") {
+      const sidecar = fs.readFileSync(`${launch.command}.launch`, "utf8");
+      assert.match(sidecar, /electron=/);
+      assert.match(sidecar, /script=/);
+    } else {
+      const script = fs.readFileSync(launch.command, "utf8");
+      assert.match(script, /export ELECTRON_RUN_AS_NODE=1/);
+      assert.doesNotMatch(script, /--run-as-node/);
+    }
     assert.doesNotMatch(cli.copyCommand, /--run-as-node/);
 
     const runtime = new JavaRuntime({

@@ -10,7 +10,38 @@ const root = path.resolve(__dirname, "..");
 const read = (directory, file) => JSON.parse(fs.readFileSync(path.join(directory, file), "utf8"));
 const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 
-/** 发布仅接受经过真实安装验证、源码与版本均吻合的 macOS arm64 载荷。 */
+const RELEASE_MATRIX = Object.freeze([
+  {
+    platform: "darwin",
+    arch: "arm64",
+    artifacts: (tag) => [`LexiMeet-${tag}-mac-arm64.dmg`, `LexiMeet-${tag}-mac-arm64.zip`],
+    feedKey: "darwin-arm64",
+  },
+  {
+    platform: "win32",
+    arch: "x64",
+    artifacts: (tag) => [`LexiMeet-${tag}-win-x64.exe`],
+    feedKey: "win32-x64",
+  },
+  {
+    platform: "linux",
+    arch: "x64",
+    artifacts: (tag) => [`LexiMeet-${tag}-linux-x64.AppImage`, `LexiMeet-${tag}-linux-x64.deb`],
+    feedKey: "linux-x64",
+  },
+]);
+
+function matrixEntry(platform, arch) {
+  return RELEASE_MATRIX.find((item) => item.platform === platform && item.arch === arch);
+}
+
+function expectedArtifacts(tag, platform, arch) {
+  const entry = matrixEntry(platform, arch);
+  if (!entry) throw new Error("不在 1.0.2 发布矩阵内的平台");
+  return entry.artifacts(tag);
+}
+
+/** 发布仅接受矩阵内、经过真实安装验证、源码与版本均吻合的载荷。 */
 function validateCandidate({ tag, commit, coreCommit, metadata, manifest, source }) {
   if (
     !/^\d+\.\d+\.\d+$/.test(tag) ||
@@ -27,17 +58,17 @@ function validateCandidate({ tag, commit, coreCommit, metadata, manifest, source
     manifest.sources?.core?.dirty !== false
   )
     throw new Error("安装包不是本标签对应的干净 Desktop/Core 源码");
+  if (!matrixEntry(metadata.platform, metadata.arch))
+    throw new Error("不在 1.0.2 发布矩阵内的平台");
   if (
-    metadata.platform !== "darwin" ||
-    metadata.arch !== "arm64" ||
-    manifest.platform !== "darwin" ||
-    manifest.arch !== "arm64" ||
+    manifest.platform !== metadata.platform ||
+    manifest.arch !== metadata.arch ||
     manifest.status !== "complete" ||
     manifest.mode !== "dist" ||
     manifest.verification?.materials !== "passed" ||
     manifest.verification?.applicationStartup !== "installed-application-passed"
   )
-    throw new Error("仅发布已完成真实安装验收的 macOS arm64 安装包");
+    throw new Error("仅发布已完成真实安装验收的矩阵平台安装包");
   if (source.sources?.length !== 2) throw new Error("发行源码必须同时且仅包含 Desktop 和 Core");
   for (const [repository, expected] of [
     ["leximeet-desktop", commit],
@@ -52,14 +83,14 @@ function validateCandidate({ tag, commit, coreCommit, metadata, manifest, source
     )
       throw new Error("完整对应源码来源不一致");
   }
-  const expectedFiles = [`LexiMeet-${tag}-mac-arm64.dmg`, `LexiMeet-${tag}-mac-arm64.zip`];
+  const expectedFiles = expectedArtifacts(tag, metadata.platform, metadata.arch);
   if (
-    manifest.artifacts?.length !== 2 ||
+    manifest.artifacts?.length !== expectedFiles.length ||
     !expectedFiles.every((name) =>
       manifest.artifacts.some((item) => item.file === name && /^[a-f0-9]{64}$/.test(item.sha256)),
     )
   )
-    throw new Error("缺少同版本 DMG/ZIP 或其校验信息");
+    throw new Error("缺少同版本安装包或其校验信息");
 }
 
 // 安装包可能较大，使用流式摘要，避免把整包读进发布进程内存。
@@ -122,8 +153,8 @@ async function prepare(output, tag = process.env.GITHUB_REF_NAME) {
     releaseTag: tag,
     commit,
     coreCommit,
-    platform: "darwin",
-    arch: "arm64",
+    platform: metadata.platform,
+    arch: metadata.arch,
     signing: manifest.distribution.signing,
     notarized: manifest.distribution.notarized,
     verification: manifest.verification,
@@ -151,29 +182,51 @@ async function verify(output, tag = process.env.GITHUB_REF_NAME) {
     release.coreCommit !== git("rev-parse", "HEAD:core-java")
   )
     throw new Error("发行物与当前 Git 标签源码不一致");
-  const expected = [
-    `LexiMeet-${tag}-mac-arm64.dmg`,
-    `LexiMeet-${tag}-mac-arm64.zip`,
-    "desktop-source.tar.gz",
-    "core-source.tar.gz",
-    "SOURCE_METADATA.json",
-    "BUILD-MANIFEST.json",
-    "LICENSE",
-  ].sort();
-  if (JSON.stringify(release.files?.map((item) => item.file).sort()) !== JSON.stringify(expected))
-    throw new Error("正式发行附件缺失或包含非预期文件");
-  const manifest = read(output, "BUILD-MANIFEST.json");
   const source = read(output, "SOURCE_METADATA.json");
-  validateCandidate({
-    tag,
-    commit: release.commit,
-    coreCommit: release.coreCommit,
-    metadata: release,
-    source,
-    manifest,
-  });
+  if (release.platforms) {
+    const expected = completeReleaseFiles(tag);
+    if (JSON.stringify(release.files?.map((item) => item.file).sort()) !== JSON.stringify(expected))
+      throw new Error("正式发行附件缺失或包含非预期文件");
+    for (const item of RELEASE_MATRIX) {
+      const manifest = read(output, `BUILD-MANIFEST-${item.platform}-${item.arch}.json`);
+      validateCandidate({
+        tag,
+        commit: release.commit,
+        coreCommit: release.coreCommit,
+        metadata: {
+          version: tag,
+          commit: release.commit,
+          platform: item.platform,
+          arch: item.arch,
+        },
+        source,
+        manifest,
+      });
+      await verifyFiles(output, manifest.artifacts);
+    }
+  } else {
+    const expected = [
+      ...expectedArtifacts(tag, release.platform, release.arch),
+      "desktop-source.tar.gz",
+      "core-source.tar.gz",
+      "SOURCE_METADATA.json",
+      "BUILD-MANIFEST.json",
+      "LICENSE",
+    ].sort();
+    if (JSON.stringify(release.files?.map((item) => item.file).sort()) !== JSON.stringify(expected))
+      throw new Error("正式发行附件缺失或包含非预期文件");
+    const manifest = read(output, "BUILD-MANIFEST.json");
+    validateCandidate({
+      tag,
+      commit: release.commit,
+      coreCommit: release.coreCommit,
+      metadata: release,
+      source,
+      manifest,
+    });
+    await verifyFiles(output, manifest.artifacts);
+  }
   await verifyFiles(output, release.files);
-  await verifyFiles(output, manifest.artifacts);
   await verifyFiles(output, source.sources);
   const files = [...release.files, await identity(output, "RELEASE-MANIFEST.json")];
   if (
@@ -184,14 +237,141 @@ async function verify(output, tag = process.env.GITHUB_REF_NAME) {
   return release;
 }
 
+function completeReleaseFiles(tag) {
+  return [
+    ...RELEASE_MATRIX.flatMap((item) => item.artifacts(tag)),
+    "desktop-source.tar.gz",
+    "core-source.tar.gz",
+    "SOURCE_METADATA.json",
+    "LICENSE",
+    "latest.json",
+    ...RELEASE_MATRIX.map((item) => `BUILD-MANIFEST-${item.platform}-${item.arch}.json`),
+  ].sort();
+}
+
+function writeUpdateFeed(output, tag, artifacts) {
+  const assets = {};
+  for (const item of RELEASE_MATRIX) {
+    const name = item.artifacts(tag)[0];
+    const file = artifacts.find((entry) => entry.file === name);
+    if (!file) throw new Error(`更新 feed 缺少 ${name}`);
+    assets[item.feedKey] = {
+      version: tag,
+      url: `https://github.com/leximeet/leximeet-desktop/releases/download/${tag}/${name}`,
+      sha256: file.sha256,
+      size: file.bytes,
+    };
+  }
+  const feed = { version: tag, assets };
+  fs.writeFileSync(path.join(output, "latest.json"), `${JSON.stringify(feed, null, 2)}\n`);
+  return feed;
+}
+
+async function merge(inputs, output, tag = process.env.GITHUB_REF_NAME) {
+  if (!Array.isArray(inputs) || inputs.length !== RELEASE_MATRIX.length)
+    throw new Error("1.0.2 必须三端齐套后才能合并发行附件");
+  fs.mkdirSync(path.dirname(output), { recursive: true });
+  fs.mkdirSync(output, { recursive: true });
+  const commit = git("rev-parse", "HEAD");
+  const coreCommit = git("rev-parse", "HEAD:core-java");
+  const platforms = [];
+  for (const directory of inputs) {
+    const release = read(directory, "RELEASE-MANIFEST.json");
+    const manifest = read(directory, "BUILD-MANIFEST.json");
+    const source = read(directory, "SOURCE_METADATA.json");
+    validateCandidate({
+      tag,
+      commit,
+      coreCommit,
+      metadata: {
+        ...release,
+        platform: release.platform,
+        arch: release.arch,
+        version: release.version,
+        commit: release.commit,
+      },
+      source,
+      manifest,
+    });
+    platforms.push({ platform: release.platform, arch: release.arch });
+    for (const file of fs.readdirSync(directory)) {
+      if (file === "RELEASE-MANIFEST.json" || file === "SHA256SUMS") continue;
+      if (file === "BUILD-MANIFEST.json") {
+        fs.copyFileSync(
+          path.join(directory, file),
+          path.join(output, `BUILD-MANIFEST-${release.platform}-${release.arch}.json`),
+        );
+        continue;
+      }
+      const dest = path.join(output, file);
+      if (!fs.existsSync(dest)) fs.copyFileSync(path.join(directory, file), dest);
+    }
+  }
+  if (platforms.length !== RELEASE_MATRIX.length) throw new Error("合并后仍缺少矩阵平台");
+  const files = await Promise.all(
+    fs
+      .readdirSync(output)
+      .filter(
+        (name) =>
+          name !== "SHA256SUMS" && name !== "RELEASE-MANIFEST.json" && name !== "latest.json",
+      )
+      .sort()
+      .map((file) => identity(output, file)),
+  );
+  writeUpdateFeed(output, tag, files);
+  const withFeed = [...files, await identity(output, "latest.json")];
+  const release = {
+    format: "leximeet.desktop-release/1",
+    version: tag,
+    releaseTag: tag,
+    commit,
+    coreCommit,
+    platforms,
+    signing: "unsigned-or-ad-hoc",
+    notarized: false,
+    files: withFeed,
+  };
+  fs.writeFileSync(
+    path.join(output, "RELEASE-MANIFEST.json"),
+    `${JSON.stringify(release, null, 2)}\n`,
+  );
+  const checksummed = [...withFeed, await identity(output, "RELEASE-MANIFEST.json")];
+  fs.writeFileSync(
+    path.join(output, "SHA256SUMS"),
+    checksummed.map((item) => `${item.sha256}  ${item.file}\n`).join(""),
+  );
+  return release;
+}
+
 if (require.main === module) {
-  const verification = process.argv[2] === "--verify";
-  const directory = path.resolve(process.argv[verification ? 3 : 2] || ".runtime/github-release");
-  (verification ? verify(directory) : prepare(directory))
+  const mode = process.argv[2];
+  Promise.resolve()
+    .then(() => {
+      if (mode === "--merge") {
+        const output = path.resolve(process.argv[3] || ".runtime/github-release");
+        return merge(
+          process.argv.slice(4).map((item) => path.resolve(item)),
+          output,
+        );
+      }
+      const verification = mode === "--verify";
+      const directory = path.resolve(
+        process.argv[verification ? 3 : 2] || ".runtime/github-release",
+      );
+      return verification ? verify(directory) : prepare(directory);
+    })
     .then((result) => console.log(`发行附件检查通过：${result.version} ${result.commit}`))
     .catch((error) => {
       console.error(error.message);
       process.exitCode = 1;
     });
 }
-module.exports = { validateCandidate, verifyFiles, prepare, verify };
+module.exports = {
+  validateCandidate,
+  verifyFiles,
+  prepare,
+  verify,
+  merge,
+  expectedArtifacts,
+  RELEASE_MATRIX,
+};

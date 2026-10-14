@@ -111,6 +111,10 @@ jobs:
         include:
           - os: macos-15
             arch: arm64
+          - os: windows-2025
+            arch: x64
+          - os: ubuntu-24.04
+            arch: x64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     defaults:
@@ -163,7 +167,7 @@ jobs:
           const executable = execFileSync(process.execPath, ['scripts/artifacts.cjs', 'find-executable'], { encoding: 'utf8' }).trim();
           fs.appendFileSync(process.env.GITHUB_ENV, `LEXIMEET_PACKAGED_EXECUTABLE=${executable}\n`);
           NODE
-      - name: Verify macOS installer and installed application
+      - name: Verify installer and installed application
         run: |
           if npm run test:install; then
             node scripts/record-package-check.cjs install passed
@@ -205,10 +209,10 @@ jobs:
           const installer = execFileSync(process.execPath, ['scripts/artifacts.cjs', 'find-installer'], { encoding: 'utf8' }).trim();
           fs.appendFileSync(process.env.GITHUB_ENV, `LEXIMEET_PREVIOUS_INSTALLER=${previousInstaller}\nLEXIMEET_INSTALLER=${installer}\n`);
           NODE
-      - name: Verify macOS upgrade and persisted profile
+      - name: Verify upgrade and persisted profile
         if: inputs.previous_candidate_run_id != ''
         run: npm run test:upgrade
-      - name: Verify macOS installation replacement and profile migration
+      - name: Verify installation replacement and profile migration
         if: inputs.previous_candidate_run_id != ''
         run: |
           if npm run test:install:upgrade; then
@@ -333,13 +337,19 @@ jobs:
           node-version: "24"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: desktop-release-files-macos-15-arm64
-          path: .runtime/github-release/
-      - name: 复核标签来源与全部附件摘要
+          pattern: desktop-release-files-*
+          path: .runtime/github-release-parts/
+          merge-multiple: false
+      - name: 合并三端附件并复核摘要
         run: |
           node - <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const root = path.resolve('.runtime/github-release-parts');
+          const inputs = fs.readdirSync(root).map((name) => path.join(root, name));
           require('./scripts/prepare-github-release.cjs')
-            .verify(require('node:path').resolve('.runtime/github-release'), process.env.LEXIMEET_RELEASE_TAG)
+            .merge(inputs, path.resolve('.runtime/github-release'), process.env.LEXIMEET_RELEASE_TAG)
+            .then(() => require('./scripts/prepare-github-release.cjs').verify(path.resolve('.runtime/github-release'), process.env.LEXIMEET_RELEASE_TAG))
             .then(result => console.log(`发行附件检查通过：${result.version} ${result.commit}`))
             .catch(error => { console.error(error.message); process.exitCode = 1; });
           NODE

@@ -1,6 +1,8 @@
 "use strict";
 const fs = require("node:fs");
 const path = require("node:path");
+const { browserUserDataDir } = require("./platform/app-paths.cjs");
+const SUPPORTED = new Set(["darwin", "linux", "win32"]);
 
 const EXTENSION_ID = /^[a-p]{32}$/;
 const PROFILE = /^(Default|Profile [0-9]+)$/;
@@ -61,17 +63,17 @@ class BrowserDiscovery {
     this.detected = [];
   }
   async scan() {
-    if (!this.enabled || this.profile.name !== "local" || this.platform !== "darwin")
+    if (!this.enabled || this.profile.name !== "local" || !SUPPORTED.has(this.platform))
       return this.snapshot();
     if (this.running) return this.snapshot();
     this.running = true;
     const next = [];
     try {
-      for (const [browser, relative] of [
-        ["chrome", "Google/Chrome"],
-        ["edge", "Microsoft Edge"],
-      ]) {
-        const root = path.join(this.homeDir, "Library", "Application Support", relative);
+      for (const browser of ["chrome", "edge"]) {
+        const root = browserUserDataDir(browser, {
+          homeDir: this.homeDir,
+          platform: this.platform,
+        });
         const ids = new Set();
         for (const profile of directories(root, 64).filter((name) => PROFILE.test(name))) {
           const directory = path.join(root, profile);
@@ -121,7 +123,12 @@ class BrowserDiscovery {
     return this.snapshot();
   }
   start() {
-    if (this.profile.name !== "local" || !this.enabled || this.platform !== "darwin" || this.timer)
+    if (
+      this.profile.name !== "local" ||
+      !this.enabled ||
+      !SUPPORTED.has(this.platform) ||
+      this.timer
+    )
       return;
     void this.scan();
     this.timer = setInterval(() => void this.scan(), this.intervalMs);
@@ -129,7 +136,7 @@ class BrowserDiscovery {
   }
   snapshot() {
     return {
-      supported: this.platform === "darwin",
+      supported: SUPPORTED.has(this.platform),
       isolated: this.profile.name !== "local",
       detected: [...this.detected],
       lastError: this.lastError,

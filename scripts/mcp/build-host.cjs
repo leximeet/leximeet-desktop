@@ -14,6 +14,11 @@ function buildMcpHost({
     ["electron/services/mcp/stdio-framing.cjs", "services/mcp/stdio-framing.cjs"],
     ["electron/services/lmcp/framing.cjs", "services/lmcp/framing.cjs"],
     ["electron/services/lmcp/private-files.cjs", "services/lmcp/private-files.cjs"],
+    ["electron/services/platform/private-files.cjs", "services/platform/private-files.cjs"],
+    ["electron/services/platform/win32-acl.cjs", "services/platform/win32-acl.cjs"],
+    ["electron/services/platform/identity.cjs", "services/platform/identity.cjs"],
+    ["electron/services/platform/transport.cjs", "services/platform/transport.cjs"],
+    ["electron/services/platform/app-paths.cjs", "services/platform/app-paths.cjs"],
   ];
   const hashes = [];
   for (const [source, target] of files) {

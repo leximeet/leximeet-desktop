@@ -1,11 +1,12 @@
 "use strict";
 const fs = require("node:fs");
 const path = require("node:path");
-const net = require("node:net");
 const os = require("node:os");
 const { FrameDecoder, FrameWriter } = require("../services/lmcp/framing.cjs");
-const { readPrivateJson, assertPrivate } = require("../services/lmcp/private-files.cjs");
+const { readPrivateJson } = require("../services/lmcp/private-files.cjs");
 const { encodeStdio, StdioDecoder } = require("../services/mcp/stdio-framing.cjs");
+const { mcpPointerPath } = require("../services/platform/app-paths.cjs");
+const { parseDescriptor, connectEndpoint } = require("../services/platform/transport.cjs");
 
 const INSTRUCTIONS =
   "先调用 leximeet_help 查看能力分组，再用 leximeet_describe 读取该组参数。" +
@@ -17,9 +18,7 @@ const KNOWN_PROTOCOLS = new Set(["2025-06-18", "2025-03-26", "2024-11-05"]);
  * initialize / ping / tools/list 在桌面未开时本地成功；工具调用再返回 DESKTOP_NOT_RUNNING。
  */
 function defaultPointerPath(homeDir = os.homedir()) {
-  if (process.platform === "darwin")
-    return path.join(homeDir, "Library/Application Support/LexiMeet/mcp/current.json");
-  return path.join(homeDir, ".config/LexiMeet/mcp/current.json");
+  return mcpPointerPath({ homeDir });
 }
 
 function resolveDescriptorPath({
@@ -54,7 +53,7 @@ function negotiateProtocol(requested) {
 
 function localInitialize(id, params) {
   const protocol = negotiateProtocol(params?.protocolVersion || "");
-  const serverInfo = { name: "leximeet", version: "1.0.1" };
+  const serverInfo = { name: "leximeet", version: "1.0.2" };
   if (protocol === "2025-06-18") serverInfo.title = "词遇";
   return {
     jsonrpc: "2.0",
@@ -172,22 +171,8 @@ function runMcpShim({
       const resolved = resolveDescriptorPath({ descriptorPath, pointerPath, homeDir });
       if (!resolved) return null;
       if (!path.isAbsolute(resolved)) throw new Error("SOURCE_REJECTED");
-      const descriptor = readPrivateJson(resolved);
-      if (
-        descriptor.format !== "leximeet.mcp-uds/1" ||
-        !/^[a-f0-9]{64}$/.test(descriptor.token || "") ||
-        !path.isAbsolute(descriptor.socketPath || "")
-      )
-        throw new Error("SOURCE_REJECTED");
-      assertPrivate(path.dirname(descriptor.socketPath), { directory: true });
-      const stat = fs.lstatSync(descriptor.socketPath);
-      if (
-        !stat.isSocket() ||
-        stat.isSymbolicLink() ||
-        stat.mode & 0o077 ||
-        (typeof process.getuid === "function" && stat.uid !== process.getuid())
-      )
-        throw new Error("UNSAFE_SOCKET");
+      const descriptor = parseDescriptor(readPrivateJson(resolved));
+      if (!/^[a-f0-9]{64}$/.test(descriptor.token || "")) throw new Error("SOURCE_REJECTED");
       return descriptor;
     } catch (error) {
       const code = ["SOURCE_REJECTED", "UNSAFE_SOCKET"].includes(error.message)
@@ -233,8 +218,13 @@ function runMcpShim({
   };
   const attachSocket = (descriptor) => {
     dropSocket();
-    socket = net.connect(descriptor.socketPath);
-    connectedPath = descriptor.socketPath;
+    try {
+      socket = connectEndpoint(descriptor);
+    } catch {
+      // 描述符仍在但端点已失效（陈旧 UDS / 管道），走本地握手。
+      return false;
+    }
+    connectedPath = descriptor.path;
     socketWriter = new FrameWriter(socket, { onError: () => finish("BACKPRESSURE_LIMIT", true) });
     const fromDesktop = new FrameDecoder();
     timer = setTimeout(abandonConnect, connectTimeoutMs);
@@ -263,8 +253,9 @@ function runMcpShim({
     });
     socket.on("error", () => abandonConnect());
     socket.on("close", () => {
-      if (connectedPath === descriptor.socketPath) abandonConnect();
+      if (connectedPath === descriptor.path) abandonConnect();
     });
+    return true;
   };
   const ensureConnected = () => {
     const descriptor = readDescriptor();
@@ -272,10 +263,8 @@ function runMcpShim({
       dropSocket();
       return false;
     }
-    if (socket && !socket.destroyed && ready && connectedPath === descriptor.socketPath)
-      return true;
-    attachSocket(descriptor);
-    return Boolean(socket);
+    if (socket && !socket.destroyed && ready && connectedPath === descriptor.path) return true;
+    return attachSocket(descriptor);
   };
   const fromClient = new StdioDecoder();
   fromClient.on("message", (message) => {

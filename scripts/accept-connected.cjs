@@ -36,7 +36,7 @@ bash scripts/test-desktop.sh --connected --cleanup 会话UUID
 原独立资料只封存，不上传、不合并；配对必须由用户在真实界面确认。
 终端 stop/restart 可测试同一资料断线恢复。Ctrl+C 退出本轮两个应用并回收大目录，保留小日志。
 异常退出的环境保留供检查；--cleanup 只回收一个确认结束的会话，拒绝仍有进程或注册的环境。
-启动和声明门禁不等于联合验收通过。当前本机 Native 注册仅完成 macOS。
+启动和声明门禁不等于联合验收通过。真实 Native 联调当前覆盖 macOS/Linux；Windows 需人工验收。
 `;
 
 function writeRecord(file, value) {
@@ -351,8 +351,8 @@ async function startPackagedLab(
     onRecord = () => {},
   } = {},
 ) {
-  if (process.platform !== "darwin")
-    throw new Error("本轮 Native Host 仅完成 macOS；其他平台需独立验收");
+  if (!["darwin", "linux"].includes(process.platform))
+    throw new Error("真实 Native Host 联调当前覆盖 macOS/Linux；Windows 需人工验收");
   if (Number(process.versions.node.split(".")[0]) < 24)
     throw new Error("请通过外层脚本准备 Node.js 24+");
   if (typeof headless !== "boolean") throw new Error("headless 必须是布尔值");

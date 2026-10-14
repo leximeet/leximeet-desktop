@@ -2,7 +2,7 @@ flowchart LR
   U[桌面 Vue 页面] --> P[命名 preload 用例]
   P --> M[Electron Main]
   B[插件 ReadingPort / CapturePort] --> H[随包 Native Host]
-  H -->|同用户 UDS（当前 macOS）| M
+  H -->|同用户本机通道（UDS / 命名管道）| M
   M -->|回环私有 HTTP| C[Java Core]
   C --> L[内部学习 / 规划 / 冻结练习]
   C --> R[LMCP 阅读 / 采集 / 授权]

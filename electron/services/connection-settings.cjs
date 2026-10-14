@@ -4,7 +4,9 @@ const {
   registerNativeHost,
   assertRegistrationOwnership,
 } = require("./lmcp/native-registration.cjs");
+const { browserUserDataDir } = require("./platform/app-paths.cjs");
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const SUPPORTED = new Set(["darwin", "linux", "win32"]);
 
 // 设置页仅提交用户意图。目录、可执行文件、来源白名单由 Main 决定。
 class ConnectionSettings {
@@ -62,17 +64,12 @@ class ConnectionSettings {
         !/^[a-p]{32}$/.test(input.extensionId || "")
       )
         throw new Error("请选择浏览器并填写有效的插件 ID");
-      if (this.platform !== "darwin")
-        throw new Error("当前本机注册仅完成 macOS 实现，其他平台尚待验证");
+      if (!SUPPORTED.has(this.platform))
+        throw new Error("当前平台尚未提供本机 Native Messaging 注册");
       const isolated = this.profile.name !== "local";
       const browserDataDir = isolated
         ? path.join(this.profile.root, "browser-profile", input.browser)
-        : path.join(
-            this.homeDir,
-            "Library",
-            "Application Support",
-            input.browser === "chrome" ? "Google/Chrome" : "Microsoft Edge",
-          );
+        : browserUserDataDir(input.browser, { homeDir: this.homeDir, platform: this.platform });
       this.register({
         extensionId: input.extensionId,
         browserDataDir,
@@ -83,6 +80,7 @@ class ConnectionSettings {
         profileName: this.profile.name,
         isolated,
         allowDailyRegistration: !isolated,
+        browser: input.browser,
       });
       await this.gateway.refreshRegistrations();
       // UI 不读取启动器内容或传输密钥，注册路径只在使用说明中诊断。
@@ -109,7 +107,7 @@ class ConnectionSettings {
         connections: status.connections,
       },
       registration: {
-        supported: this.platform === "darwin",
+        supported: SUPPORTED.has(this.platform),
         isolated: this.profile.name !== "local",
       },
       discovery: this.discoveryStatus(),
@@ -119,7 +117,7 @@ class ConnectionSettings {
   async registerDiscovered(browser, extensionIds) {
     if (
       this.profile.name !== "local" ||
-      this.platform !== "darwin" ||
+      !SUPPORTED.has(this.platform) ||
       !["chrome", "edge"].includes(browser) ||
       !Array.isArray(extensionIds) ||
       !extensionIds.length ||
@@ -135,12 +133,11 @@ class ConnectionSettings {
     }
     const registration = this.register({
       extensionIds,
-      browserDataDir: path.join(
-        this.homeDir,
-        "Library",
-        "Application Support",
-        browser === "chrome" ? "Google/Chrome" : "Microsoft Edge",
-      ),
+      browserDataDir: browserUserDataDir(browser, {
+        homeDir: this.homeDir,
+        platform: this.platform,
+      }),
+      browser,
       profileRoot: this.profile.root,
       electronExecutable: this.electronExecutable,
       hostScript: this.hostScript,

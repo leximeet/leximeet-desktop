@@ -129,13 +129,17 @@ function verifyPackageMaterials({ projectDir, resourcesDir }) {
     "host/main.cjs": "electron/native-host/main.cjs",
     "services/lmcp/framing.cjs": "electron/services/lmcp/framing.cjs",
     "services/lmcp/private-files.cjs": "electron/services/lmcp/private-files.cjs",
+    "services/platform/private-files.cjs": "electron/services/platform/private-files.cjs",
+    "services/platform/win32-acl.cjs": "electron/services/platform/win32-acl.cjs",
+    "services/platform/identity.cjs": "electron/services/platform/identity.cjs",
+    "services/platform/transport.cjs": "electron/services/platform/transport.cjs",
   };
   if (
     host.format !== "leximeet.native-host-bundle/1" ||
     host.entry !== "host/main.cjs" ||
-    host.files?.length !== 3
+    host.files?.length !== Object.keys(hostSources).length
   )
-    throw new Error("Native Host 清单不是固定三项物料");
+    throw new Error("Native Host 清单不是固定物料集合");
   const seen = new Set();
   for (const file of host.files) {
     if (!hostSources[file.path] || seen.has(file.path))
@@ -151,13 +155,18 @@ function verifyPackageMaterials({ projectDir, resourcesDir }) {
     "services/mcp/stdio-framing.cjs": "electron/services/mcp/stdio-framing.cjs",
     "services/lmcp/framing.cjs": "electron/services/lmcp/framing.cjs",
     "services/lmcp/private-files.cjs": "electron/services/lmcp/private-files.cjs",
+    "services/platform/private-files.cjs": "electron/services/platform/private-files.cjs",
+    "services/platform/win32-acl.cjs": "electron/services/platform/win32-acl.cjs",
+    "services/platform/identity.cjs": "electron/services/platform/identity.cjs",
+    "services/platform/transport.cjs": "electron/services/platform/transport.cjs",
+    "services/platform/app-paths.cjs": "electron/services/platform/app-paths.cjs",
   };
   if (
     mcp.format !== "leximeet.mcp-host-bundle/1" ||
     mcp.entry !== "host/main.cjs" ||
-    mcp.files?.length !== 4
+    mcp.files?.length !== Object.keys(mcpSources).length
   )
-    throw new Error("MCP Host 清单不是固定四项物料");
+    throw new Error("MCP Host 清单不是固定物料集合");
   const mcpSeen = new Set();
   for (const file of mcp.files) {
     if (!mcpSources[file.path] || mcpSeen.has(file.path))

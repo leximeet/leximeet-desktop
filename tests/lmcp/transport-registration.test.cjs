@@ -26,10 +26,7 @@ function fixture(t, marker = { profile: "test" }) {
     profileRoot,
     browserDataDir: path.join(profileRoot, "browser-profile", "chrome"),
     extensionId: "a".repeat(32),
-    electronExecutable: path.join(
-      project,
-      "node_modules/electron/dist/Electron.app/Contents/MacOS/Electron",
-    ),
+    electronExecutable: require("../helpers/electron-binary.cjs").electronBinary(),
     hostScript: path.join(project, "electron/native-host/main.cjs"),
   };
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

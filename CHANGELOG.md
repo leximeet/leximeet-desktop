@@ -2,6 +2,23 @@
 
 本文件记录面向使用者与贡献者的行为变化。1.0.0 本机正式构建与验收分别记录；发行说明与实际附件以对应 Release 为准。
 
+## [1.0.2] — 2026-10-14
+
+### 新增
+
+- 在已验收的 macOS arm64 之外支持 Windows x64（NSIS）与 Linux x64（AppImage + deb）。三端安装包齐套并完成安装验收后才发 1.0.2。
+- Windows 本机通道改为命名管道 + 传输令牌 + 收紧 DACL；描述符增加 `leximeet.{lmcp,mcp}-transport/1`，旧 `*-uds/1` 继续当 UDS。
+- Windows MCP / Native Host 使用随包 PE stub 与 `.launch` 旁路，满足官方 MCP SDK `shell:false`。
+- Native Messaging 覆盖 HKCU（Chrome / Edge 的 32 与 64 位视图）以及 Linux 用户级清单目录。
+- 私有文件在 NTFS 上用 ACL 保护；Linux 系统通知与 XDG 开机自启标为尽力支持。
+- GitHub Actions 矩阵覆盖 macos-15 / windows-2025 / ubuntu-24.04；干净 runner 上走 L2 安装冒烟。发布 feed 含 `win32-x64` / `linux-x64`。
+
+### 边界
+
+- Windows 不代码签名，发行说明写明 SmartScreen「未知发布者」。macOS 保持 ad-hoc，未公证。
+- 不做 Windows/Linux arm64、macOS Intel；不认 `CODEX_HOME`；不改 LMCP 1.0.0 冻结快照。
+- 浏览器仍只支持 Chrome + Edge。真实三家助手客户端与系统通知听感仍须人工验收。
+
 ## [1.0.1] — 2026-10-14
 
 ### 新增

@@ -26,10 +26,46 @@ env:
   ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
 
 jobs:
+  lint:
+    name: Format, documents and audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Verify formatting and public documents
+        run: |
+          npm run format:check
+          npm run docs:check
+          npm audit --omit=dev --audit-level=high
+
   desktop:
-    name: Desktop units, Core, real process and native UI
-    runs-on: macos-15
-    timeout-minutes: 60
+    name: Desktop (${{ matrix.os }}, ${{ matrix.suite }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: arm64
+            suite: full
+          - os: windows-2025
+            arch: x64
+            suite: core-cross
+          - os: ubuntu-24.04
+            arch: x64
+            suite: core-cross
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -48,32 +84,50 @@ jobs:
         with:
           python-version: "3.13"
       - name: Check the acceptance architecture
-        run: node -e "if(process.arch !== 'arm64') throw new Error('1.0.0 CI 要求 macOS arm64 runner')"
-      # 同一个入口准备依赖、固定公共资源和当前构建；不需要 Chromium 插件或云服务。
+        if: matrix.suite == 'full'
+        run: node -e "if(process.arch !== 'arm64') throw new Error('macOS 完整门禁要求 arm64 runner')"
       - name: Run the isolated desktop gate
+        if: matrix.suite == 'full'
         run: bash scripts/test-desktop.sh --verify
+      - name: Run the cross-platform core gate
+        if: matrix.suite == 'core-cross'
+        run: |
+          npm ci
+          node scripts/verify-cross.cjs
       - name: Verify actual Core Jar, SBOM and original license bytes
         run: python3 core-java/scripts/verify-release.py
-      - name: Verify formatting and public documents
-        run: |
-          npm run format:check
-          npm run docs:check
-          npm audit --omit=dev --audit-level=high
       - name: Verify first install and seven-day usage
+        if: matrix.suite == 'full'
         run: bash scripts/test-desktop.sh --journey --prepared
-      - name: Build the current unsigned application
+      - name: Build the current unsigned application directory
+        if: matrix.suite == 'full'
         run: node scripts/package.cjs dir
+      - name: Build current unsigned installers
+        if: matrix.suite == 'core-cross'
+        run: npm run package:dist
       - name: Verify actual packaged licenses, contract and source bytes
         run: |
           mkdir -p test-results/package-materials
           node scripts/verify-package-materials.cjs > test-results/package-materials/results.json
       - name: Verify bundled Java and actual application
+        if: matrix.suite == 'full'
         run: npm run test:package:desktop
+      - name: Upload installers for a clean-runner smoke
+        if: matrix.suite == 'core-cross'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pkg-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            release/**/*.exe
+            release/**/*.AppImage
+            release/**/*.deb
+          if-no-files-found: error
+          retention-days: 3
       - name: Upload local workflow evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: desktop-local-workflow
+          name: desktop-local-workflow-${{ matrix.os }}-${{ matrix.arch }}
           path: |
             test-results/desktop-001/
             playwright-report/desktop-001/
@@ -85,3 +139,74 @@ jobs:
             playwright-report/daily-journey/
           if-no-files-found: warn
           retention-days: 14
+
+  install-smoke:
+    name: Install smoke (${{ matrix.os }}, ${{ matrix.kind }})
+    needs: desktop
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2025
+            pkg: windows-2025-x64
+            kind: nsis
+          - os: ubuntu-24.04
+            pkg: ubuntu-24.04-x64
+            kind: deb
+          - os: ubuntu-24.04
+            pkg: ubuntu-24.04-x64
+            kind: appimage
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: pkg-${{ matrix.pkg }}
+          path: pkg
+      - name: Install Linux display for AppImage/deb launch
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y xvfb libfuse2t64 || sudo apt-get install -y xvfb libfuse2
+      - name: Locate installer
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const kind = process.env.KIND;
+          const root = path.resolve('pkg');
+          const files = [];
+          const visit = (dir) => {
+            for (const name of fs.readdirSync(dir)) {
+              const full = path.join(dir, name);
+              if (fs.statSync(full).isDirectory()) visit(full);
+              else files.push(full);
+            }
+          };
+          visit(root);
+          const match = files.find((file) =>
+            kind === 'nsis' ? /\.exe$/i.test(file) :
+            kind === 'deb' ? /\.deb$/i.test(file) :
+            /\.AppImage$/i.test(file));
+          if (!match) throw new Error(`pkg 中没有 ${kind} 安装包`);
+          fs.appendFileSync(process.env.GITHUB_ENV, `LEXIMEET_INSTALLER=${match}\nLEXIMEET_INSTALL_KIND=${kind}\n`);
+          NODE
+        env:
+          KIND: ${{ matrix.kind }}
+      - name: L2 install, start, Core/MCP, uninstall
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a node scripts/install-smoke.cjs
+          else
+            node scripts/install-smoke.cjs
+          fi

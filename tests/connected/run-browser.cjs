@@ -29,7 +29,8 @@ function passesCurrentSuite(record, stats) {
 async function main() {
   if (process.argv.length > 2)
     throw new Error("该入口不接受可见/调试/重试参数；人工验收使用 --connected");
-  if (process.platform !== "darwin") throw new Error("真实 Native 联调当前仅完成 macOS");
+  if (!["darwin", "linux"].includes(process.platform))
+    throw new Error("真实 Native 联调当前覆盖 macOS/Linux；Windows 需人工验收");
   require("../helpers/background-environment.cjs").assertBackgroundRunner();
   const candidate = gate.checkReadiness();
   require("../../scripts/lmcp/verify-contract.cjs").verifyContract();

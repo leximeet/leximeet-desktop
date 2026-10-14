@@ -12,6 +12,7 @@ const {
 const { HostOperations } = require("./host-operations.cjs");
 const { validateHostParams, validateHostResponse } = require("./host-validation.cjs");
 const { assertRegistrationOwnership } = require("./native-registration.cjs");
+const { listenTransport, describeTransport, transportKind } = require("../platform/transport.cjs");
 
 const ORIGIN = /^chrome-extension:\/\/[a-p]{32}\/$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -214,15 +215,18 @@ class LmcpGateway {
   }
   writeDescriptor() {
     if (!this.server || !this.token || this.closing) return;
-    writePrivateJson(this.descriptorPath, {
-      format: "leximeet.lmcp-uds/1",
-      instanceId: this.instanceId,
-      socketPath: this.socketPath,
-      token: this.token,
-      allowedOrigins: [...this.allowedOrigins],
-      pid: process.pid,
-      maxFrameBytes: MAX_FRAME_BYTES,
-    });
+    writePrivateJson(
+      this.descriptorPath,
+      describeTransport({
+        purpose: "lmcp",
+        kind: this.transportKind || transportKind(),
+        path: this.socketPath,
+        token: this.token,
+        instanceId: this.instanceId,
+        maxFrameBytes: MAX_FRAME_BYTES,
+        extra: { allowedOrigins: [...this.allowedOrigins] },
+      }),
+    );
   }
   async start() {
     if (this.closing) throw new Error("GATEWAY_CLOSED");
@@ -236,30 +240,24 @@ class LmcpGateway {
     }
   }
   async startInternal() {
-    if (!["darwin", "linux"].includes(process.platform))
-      throw new Error("LMCP_TRANSPORT_PLATFORM_UNSUPPORTED");
     this.refreshRegistrations();
     ensurePrivateDirectory(path.dirname(this.descriptorPath));
     this.operations.load();
-    // 中文工作区路径会超过 macOS sockaddr_un 长度，使用短且同用户独占的临时目录。
-    const base = `/tmp/leximeet-lmcp-${typeof process.getuid === "function" ? process.getuid() : "user"}`;
-    ensurePrivateDirectory(base);
-    const key = createHash("sha256").update(this.profile.root).digest("hex").slice(0, 20);
-    this.socketDirectory = path.join(base, key);
-    ensurePrivateDirectory(this.socketDirectory);
-    // 每次启动独立随机目录，不覆盖仍在工作的另一份 Desktop，也不删除不明旧 socket。
     this.instanceId = randomUUID();
-    this.socketPath = path.join(this.socketDirectory, `${this.instanceId.slice(0, 8)}.sock`);
     this.token = randomBytes(32).toString("hex");
-    const server = net.createServer((socket) => this.accept(socket));
-    this.server = server;
+    const listened = await listenTransport({
+      purpose: "lmcp",
+      profileRoot: this.profile.root,
+      instanceId: this.instanceId,
+      onConnection: (socket) => this.accept(socket),
+    });
+    this.transportKind = listened.kind;
+    this.socketPath = listened.path;
+    this.socketDirectory = listened.socketDirectory;
+    this.server = listened.server;
+    this.transportClose = () => listened.close();
     try {
-      await new Promise((resolve, reject) => {
-        server.once("error", reject);
-        server.listen(this.socketPath, resolve);
-      });
-      fs.chmodSync(this.socketPath, 0o600);
-      server.on("error", () => {
+      this.server.on("error", () => {
         this.lastError = "本机连接服务发生错误";
       });
       this.writeDescriptor();
@@ -267,7 +265,7 @@ class LmcpGateway {
       return this.status();
     } catch (error) {
       this.server = null;
-      server.close();
+      await listened.close().catch(() => {});
       throw error;
     }
   }
@@ -927,7 +925,7 @@ class LmcpGateway {
     for (const client of this.connections.values()) this.expireRuntimeGrant(client);
     return {
       running: !!this.server && !this.closing,
-      transport: "unix-domain-socket",
+      transport: this.transportKind || transportKind(),
       descriptorPath: this.descriptorPath,
       lastError: this.lastError,
       activeRequests: this.active,
@@ -968,13 +966,16 @@ class LmcpGateway {
       const descriptor = readPrivateJson(this.descriptorPath);
       if (descriptor.instanceId === this.instanceId) fs.rmSync(this.descriptorPath);
     }
-    if (this.socketPath && fs.existsSync(this.socketPath)) fs.rmSync(this.socketPath);
-    if (this.socketDirectory) {
-      // 只删除自己使用过的空目录；同资料根另一实例的 socket 和不明旧文件均保留。
-      try {
-        fs.rmdirSync(this.socketDirectory);
-      } catch {
-        // 非空或已不存在都无需继续清理。
+    if (this.transportClose) await this.transportClose().catch(() => {});
+    else {
+      if (this.socketPath && this.transportKind !== "named-pipe" && fs.existsSync(this.socketPath))
+        fs.rmSync(this.socketPath);
+      if (this.socketDirectory) {
+        try {
+          fs.rmdirSync(this.socketDirectory);
+        } catch {
+          // 非空或已不存在都无需继续清理。
+        }
       }
     }
     this.connections.clear();

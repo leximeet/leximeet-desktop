@@ -20,12 +20,10 @@ const {
 const { readPrivateJson } = require("../../electron/services/lmcp/private-files.cjs");
 const { buildNativeHost } = require("../../scripts/lmcp/build-host.cjs");
 const { startFocusMonitor } = require("../helpers/macos-focus-monitor.cjs");
+const { electronBinary } = require("../helpers/electron-binary.cjs");
 
 const project = path.resolve(__dirname, "../..");
-const electron = path.join(
-  project,
-  "node_modules/electron/dist/Electron.app/Contents/MacOS/Electron",
-);
+const electron = electronBinary();
 const script = path.join(project, "electron/native-host/main.cjs");
 const origin = `chrome-extension://${"a".repeat(32)}/`;
 const otherOrigin = `chrome-extension://${"b".repeat(32)}/`;
@@ -130,12 +128,14 @@ async function fixture(t, options = {}) {
     try {
       await Promise.all(children.map(stopChild));
       await gateway.close();
-      assert.equal(fs.existsSync(gateway.socketPath), false, "只回收本次UDS");
-      assert.equal(
-        fs.existsSync(gateway.socketDirectory),
-        false,
-        "回收本次隔离资料根的空Socket目录",
-      );
+      if (process.platform !== "win32") {
+        assert.equal(fs.existsSync(gateway.socketPath), false, "只回收本次UDS");
+        assert.equal(
+          fs.existsSync(gateway.socketDirectory),
+          false,
+          "回收本次隔离资料根的空Socket目录",
+        );
+      }
       if (registration && fs.existsSync(registration.recordPath))
         unregisterNativeHost(registration);
     } finally {
@@ -143,8 +143,12 @@ async function fixture(t, options = {}) {
       if (focus) {
         const report = await focus.stop();
         t.diagnostic(`LMCP_NATIVE_FOCUS ${JSON.stringify(report)}`);
-        assert.equal(report.complete, true, report.error || "焦点监测必须覆盖启动前至退出后");
-        assert.deepEqual(report.violations, [], "Native Host 和监测进程不能成为前台应用");
+        if (process.platform === "darwin") {
+          assert.equal(report.complete, true, report.error || "焦点监测必须覆盖启动前至退出后");
+          assert.deepEqual(report.violations, [], "Native Host 和监测进程不能成为前台应用");
+        } else {
+          assert.equal(report.supported, false);
+        }
       }
     }
   });
@@ -327,9 +331,11 @@ test("随包 Electron Native Host 在没有系统 Node 的独立进程双向传�
   assert.deepEqual((await pending).result, { page: null });
   assert.equal(browser.stderr, "");
   assert.equal(f.gateway.status().connections.length, 1);
-  assert.equal(fs.statSync(f.gateway.descriptorPath).mode & 0o777, 0o600);
+  if (process.platform !== "win32")
+    assert.equal(fs.statSync(f.gateway.descriptorPath).mode & 0o777, 0o600);
   const descriptor = readPrivateJson(f.gateway.descriptorPath);
-  assert.equal(fs.statSync(descriptor.socketPath).mode & 0o777, 0o600);
+  if (descriptor.kind === "uds" || descriptor.socketPath)
+    assert.equal(fs.statSync(descriptor.path || descriptor.socketPath).mode & 0o777, 0o600);
   assert(!JSON.stringify(f.gateway.status()).includes(descriptor.token));
 });
 
@@ -339,7 +345,7 @@ test("外置 Host 发布物料可独立运行，不读取 app.asar 或系统 Nod
   assert.equal((await browser.call("getWorkspace", {}, browser.authorization)).ok, true);
   const bundleRoot = path.join(f.root, "packaged-resources", "native-host");
   const bundle = JSON.parse(fs.readFileSync(path.join(bundleRoot, "bundle.json")));
-  assert.equal(bundle.files.length, 3);
+  assert.equal(bundle.files.length, 7);
   assert.equal(bundle.runtime, "electron-run-as-node");
   assert.equal(browser.stderr, "");
 });
@@ -766,7 +772,7 @@ test("Core 大响应转换为有界错误帧；同 Port 换 connectionId 拒绝"
 test("未经握手的 UDS 和旧代次 token 都不能访问 Core", async (t) => {
   const f = await fixture(t);
   const descriptor = readPrivateJson(f.gateway.descriptorPath);
-  const socket = net.connect(descriptor.socketPath);
+  const socket = net.connect(descriptor.path || descriptor.socketPath);
   await new Promise((resolve) => socket.once("connect", resolve));
   socket.write(
     encodeFrame({ kind: "transport-auth", token: "x".repeat(64), extensionOrigin: origin }),

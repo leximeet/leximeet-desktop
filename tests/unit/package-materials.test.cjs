@@ -48,6 +48,11 @@ async function fixture(t) {
     "electron/services/mcp/stdio-framing.cjs": "mcp stdio fixture",
     "electron/services/lmcp/framing.cjs": "framing fixture",
     "electron/services/lmcp/private-files.cjs": "private fixture",
+    "electron/services/platform/private-files.cjs": "platform private fixture",
+    "electron/services/platform/win32-acl.cjs": "win32 acl fixture",
+    "electron/services/platform/identity.cjs": "identity fixture",
+    "electron/services/platform/transport.cjs": "transport fixture",
+    "electron/services/platform/app-paths.cjs": "app-paths fixture",
     "frontend/dist/index.html": "本轮正式前端 fixture",
   };
   sources["package.json"] = JSON.stringify({
@@ -73,6 +78,10 @@ async function fixture(t) {
     ["host/main.cjs", "electron/native-host/main.cjs"],
     ["services/lmcp/framing.cjs", "electron/services/lmcp/framing.cjs"],
     ["services/lmcp/private-files.cjs", "electron/services/lmcp/private-files.cjs"],
+    ["services/platform/private-files.cjs", "electron/services/platform/private-files.cjs"],
+    ["services/platform/win32-acl.cjs", "electron/services/platform/win32-acl.cjs"],
+    ["services/platform/identity.cjs", "electron/services/platform/identity.cjs"],
+    ["services/platform/transport.cjs", "electron/services/platform/transport.cjs"],
   ].map(([file, source]) => {
     put(resourcesDir, `native-host/${file}`, sources[source]);
     return { path: file, sha256: hash(sources[source]) };
@@ -91,6 +100,11 @@ async function fixture(t) {
     ["services/mcp/stdio-framing.cjs", "electron/services/mcp/stdio-framing.cjs"],
     ["services/lmcp/framing.cjs", "electron/services/lmcp/framing.cjs"],
     ["services/lmcp/private-files.cjs", "electron/services/lmcp/private-files.cjs"],
+    ["services/platform/private-files.cjs", "electron/services/platform/private-files.cjs"],
+    ["services/platform/win32-acl.cjs", "electron/services/platform/win32-acl.cjs"],
+    ["services/platform/identity.cjs", "electron/services/platform/identity.cjs"],
+    ["services/platform/transport.cjs", "electron/services/platform/transport.cjs"],
+    ["services/platform/app-paths.cjs", "electron/services/platform/app-paths.cjs"],
   ].map(([file, source]) => {
     put(resourcesDir, `mcp-host/${file}`, sources[source]);
     return { path: file, sha256: hash(sources[source]) };
@@ -113,7 +127,7 @@ test("实际包原文和来源一致，门禁只读且报告不含本机路径",
   const before = hash(fs.readFileSync(archive));
   const report = verifyPackageMaterials(f);
   assert.equal(report.status, "passed");
-  assert.equal(report.checkedFiles, 27);
+  assert.equal(report.checkedFiles, 41);
   assert.equal(hash(fs.readFileSync(archive)), before);
   assert.equal(JSON.stringify(report).includes(f.owned), false);
   assert.equal(report.runtimeDependencyBoundary.status, "passed");

@@ -40,7 +40,7 @@ async function writeBuildManifest({ root, output, mode, version, sources }) {
   if (packaged.version !== version) throw new Error("实际应用版本与本轮构建版本不一致");
   const files = fs
     .readdirSync(output)
-    .filter((name) => /\.(?:dmg|zip|exe|AppImage)$/.test(name))
+    .filter((name) => /\.(?:dmg|zip|exe|AppImage|deb)$/.test(name))
     .sort();
   if (mode === "dist" && !files.length) throw new Error("未生成本轮安装文件");
   const artifacts = [];

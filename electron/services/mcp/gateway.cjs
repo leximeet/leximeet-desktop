@@ -2,14 +2,15 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
-const net = require("node:net");
-const { randomUUID, randomBytes, createHash, timingSafeEqual } = require("node:crypto");
+const { randomUUID, randomBytes, timingSafeEqual } = require("node:crypto");
 const { FrameDecoder, FrameWriter, MAX_FRAME_BYTES } = require("../lmcp/framing.cjs");
 const {
   ensurePrivateDirectory,
   writePrivateJson,
   readPrivateJson,
 } = require("../lmcp/private-files.cjs");
+const { mcpPointerPath } = require("../platform/app-paths.cjs");
+const { listenTransport, describeTransport, transportKind } = require("../platform/transport.cjs");
 
 function equalToken(left, right) {
   if (typeof left !== "string" || typeof right !== "string") return false;
@@ -19,7 +20,7 @@ function equalToken(left, right) {
 }
 
 /**
- * 复用 LMCP 帧与私有文件：shim 只到同用户 UDS，Core 令牌永不进入客户端配置。
+ * 复用 LMCP 帧与私有文件：shim 只到同用户本机通道（UDS / 命名管道），Core 令牌永不进入客户端配置。
  */
 class McpGateway {
   constructor({
@@ -45,14 +46,7 @@ class McpGateway {
       maxConnections,
       rateLimitPerMinute,
     });
-    this.pointerPath =
-      pointerPath ||
-      path.join(
-        homeDir,
-        process.platform === "darwin"
-          ? "Library/Application Support/LexiMeet/mcp/current.json"
-          : ".config/LexiMeet/mcp/current.json",
-      );
+    this.pointerPath = pointerPath || mcpPointerPath({ homeDir });
     this.descriptorPath = path.join(profile.root, "mcp", "mcp-uds.json");
     this.server = null;
     this.socketPath = "";
@@ -66,21 +60,18 @@ class McpGateway {
   async start() {
     if (this.server) return this;
     this.instanceId = randomUUID();
-    const base = `/tmp/leximeet-mcp-${typeof process.getuid === "function" ? process.getuid() : "user"}`;
-    ensurePrivateDirectory(base);
-    const key = createHash("sha256").update(this.profile.root).digest("hex").slice(0, 20);
-    this.socketDirectory = path.join(base, key, this.instanceId.slice(0, 8));
-    ensurePrivateDirectory(path.dirname(this.socketDirectory));
-    ensurePrivateDirectory(this.socketDirectory);
-    this.socketPath = path.join(this.socketDirectory, "mcp.sock");
     this.token = randomBytes(32).toString("hex");
-    const server = net.createServer((socket) => this.accept(socket));
-    this.server = server;
-    await new Promise((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(this.socketPath, resolve);
+    const listened = await listenTransport({
+      purpose: "mcp",
+      profileRoot: this.profile.root,
+      instanceId: this.instanceId,
+      onConnection: (socket) => this.accept(socket),
     });
-    fs.chmodSync(this.socketPath, 0o600);
+    this.transportKind = listened.kind;
+    this.socketPath = listened.path;
+    this.socketDirectory = listened.socketDirectory;
+    this.server = listened.server;
+    this.transportClose = () => listened.close();
     this.writeDescriptor();
     this.writePointer();
     this.lastError = null;
@@ -88,14 +79,17 @@ class McpGateway {
   }
 
   writeDescriptor() {
-    writePrivateJson(this.descriptorPath, {
-      format: "leximeet.mcp-uds/1",
-      instanceId: this.instanceId,
-      socketPath: this.socketPath,
-      token: this.token,
-      pid: process.pid,
-      maxFrameBytes: MAX_FRAME_BYTES,
-    });
+    writePrivateJson(
+      this.descriptorPath,
+      describeTransport({
+        purpose: "mcp",
+        kind: this.transportKind || transportKind(),
+        path: this.socketPath,
+        token: this.token,
+        instanceId: this.instanceId,
+        maxFrameBytes: MAX_FRAME_BYTES,
+      }),
+    );
   }
 
   writePointer() {
@@ -249,12 +243,16 @@ class McpGateway {
       this.server.close(() => resolve());
       this.server = null;
     });
-    if (this.socketPath && fs.existsSync(this.socketPath)) fs.rmSync(this.socketPath);
-    if (this.socketDirectory) {
-      try {
-        fs.rmdirSync(this.socketDirectory);
-      } catch {
-        /* 目录非空则保留 */
+    if (this.transportClose) await this.transportClose().catch(() => {});
+    else {
+      if (this.socketPath && this.transportKind !== "named-pipe" && fs.existsSync(this.socketPath))
+        fs.rmSync(this.socketPath);
+      if (this.socketDirectory) {
+        try {
+          fs.rmdirSync(this.socketDirectory);
+        } catch {
+          /* 目录非空则保留 */
+        }
       }
     }
     if (fs.existsSync(this.descriptorPath)) fs.rmSync(this.descriptorPath, { force: true });

@@ -196,13 +196,10 @@ const studyNotifications = new StudyNotifications({
   now: studyNow,
   Notification: silentTest ? SilentNotification : Notification,
   request: (data) => core.request("/api/desktop/command", "POST", data),
-  play:
-    process.platform === "darwin"
-      ? (word) =>
-          require("./services/reminder-audio.cjs").playReminderAudio(pronunciation, word, {
-            silent: silentTest,
-          })
-      : null,
+  play: (word) =>
+    require("./services/reminder-audio.cjs").playReminderAudio(pronunciation, word, {
+      silent: silentTest,
+    }),
   open: showMainWindow,
   changed: notifyChanged,
 });
@@ -235,6 +232,8 @@ const desktop = new DesktopController({
   archive,
   // 文件备份界面尚未开放；保留底层能力，供正式入口后续接入。
   fileBackupsEnabled: false,
+  homeDir: app.getPath("home"),
+  executablePath: process.execPath,
   createTray: () => {
     const icon = nativeImage.createFromPath(path.join(projectDir, "resources/brand/icon.png"));
     const tray = new Tray(icon.resize({ width: 20, height: 20 }));
@@ -298,6 +297,8 @@ ensureLauncher({
   homeDir: app.getPath("home"),
   electronExecutable: process.execPath,
   shimPath: mcpShimPath,
+  resourcesPath: app.isPackaged ? process.resourcesPath : undefined,
+  projectDir,
 });
 const assistantSettings = new AssistantSettings({
   core,

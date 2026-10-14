@@ -110,7 +110,11 @@ test("恢复通知只绑定已投递的题目，过期题目移除；不重复 s
 test("能力不足或选定模式不可出题时不静默改模式，也不弹出窗口", async () => {
   let opened = false;
   const adapter = new StudyNotifications({
-    Notification: Notice,
+    Notification: class Unsupported extends Notice {
+      static isSupported() {
+        return false;
+      }
+    },
     platform: "linux",
     open: () => {
       opened = true;
