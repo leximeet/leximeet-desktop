@@ -391,6 +391,8 @@ class JavaRuntime {
   }
   async stop() {
     this.stopping = true;
+    // 未成功占住目录的启动失败（如 DATA_IN_USE）不得按资料目录回收，否则会误杀持锁原进程。
+    const ownedDirectory = Boolean(this.port) || this.state === "ready";
     this.port = null;
     this.generation++;
     this.state = "stopped";
@@ -416,23 +418,36 @@ class JavaRuntime {
         }
       }
     }
-    for (const marker of [
-      this.instanceId && `leximeet.instance=${this.instanceId}`,
-      this.dataDir,
-    ].filter(Boolean)) {
+    for (const marker of reclaimMarkers({
+      instanceId: this.instanceId,
+      dataDir: this.dataDir,
+      ownedDirectory,
+    })) {
       try {
         signalOwnedByMarker(marker);
       } catch {
         /* 按实例标记或资料目录回收失败时仍走下面的 PID 等待 */
       }
     }
-    if (!child || !pid || child.exitCode !== null || child.signalCode !== null) return;
+    if (!child || !pid || child.exitCode !== null || child.signalCode !== null) {
+      try {
+        child?.unref();
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
     await new Promise((resolve) => {
       let settled = false;
       const done = () => {
         if (settled) return;
         settled = true;
         detachStdio();
+        try {
+          child.unref();
+        } catch {
+          /* 超时后放开句柄，避免测试进程被残留 JVM 拖住 */
+        }
         clearTimeout(soft);
         clearTimeout(hard);
         resolve();
@@ -453,6 +468,14 @@ class JavaRuntime {
     });
   }
 }
+/** 只有成功占住资料目录的实例才按 --data-dir 回收，避免误杀同目录持锁进程。 */
+function reclaimMarkers({ instanceId, dataDir, ownedDirectory }) {
+  const markers = [];
+  if (instanceId) markers.push(`leximeet.instance=${instanceId}`);
+  if (ownedDirectory && dataDir) markers.push(dataDir);
+  return markers;
+}
+
 // LMCP 查询与写入有不同的有界预算；超时不表示回滚，写入须查询原回执。
 function requestBudget(route, body) {
   if (["/api/import", "/api/export", "/api/snapshot"].includes(route)) return 90000;
@@ -465,6 +488,7 @@ module.exports = {
   JavaRuntime,
   javaExecutable,
   requestBudget,
+  reclaimMarkers,
   coreEnvironment,
   startupFailure,
   coreStartTimeoutMs,

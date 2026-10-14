@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { execFileSync } = require("node:child_process");
 const { once } = require("node:events");
 const net = require("node:net");
 const { setTimeout: delay } = require("node:timers/promises");
@@ -51,8 +52,20 @@ function fixture(t, { jarPath = builtJar, Runtime = JavaRuntime, ...options } = 
       for (const child of children) await stopChild(child);
       try {
         signalOwnedByMarker(directory);
+        signalOwnedByMarker(runtime.dataDir);
+        if (runtime.instanceId) signalOwnedByMarker(`leximeet.instance=${runtime.instanceId}`);
       } catch {
-        /* Windows 上按资料目录再收一次，避免残留 JVM 占住目录 */
+        /* Windows 上按资料目录/实例标记再收一次 */
+      }
+      if (process.platform === "win32") {
+        try {
+          execFileSync("taskkill", ["/F", "/IM", "java.exe", "/T"], {
+            windowsHide: true,
+            timeout: 15000,
+          });
+        } catch {
+          /* 本文件串行且独占 java；没有残留时 taskkill 返回非 0 */
+        }
       }
       // 仅删除本用例通过 mkdtemp 创建的目录，不接触正式用户目录。
       fs.rmSync(directory, { recursive: true, force: true, maxRetries: 8, retryDelay: 50 });

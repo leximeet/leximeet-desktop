@@ -65,7 +65,8 @@ test("停止后本轮子进程确实退出", async (t) => {
 test("Windows 命令行查询脚本用分号分隔赋值，避免 PowerShell 解析失败", () => {
   const script = windowsCommandLineQuery("C:\\tmp\\leximeet-core");
   assert.match(script, /\$n = "C:\\\\tmp\\\\leximeet-core";/);
-  assert.match(script, /Get-CimInstance -ClassName Win32_Process/);
+  assert.match(script, /Get-CimInstance -ClassName Win32_Process -Filter/);
+  assert.match(script, /Name='java.exe'/);
   assert.doesNotMatch(script, /" Get-CimInstance/);
 });
 

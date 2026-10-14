@@ -111,7 +111,12 @@ function windowsTaskkill(pid, force) {
 
 /** Windows 上 Node 跟踪的 PID 可能不是真正持锁的 JVM；只匹配本实例资料目录的命令行。 */
 function windowsCommandLineQuery(needle) {
-  return `$n = ${JSON.stringify(String(needle))}; Get-CimInstance -ClassName Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($n) } | ForEach-Object { $_.ProcessId }`;
+  return [
+    `$n = ${JSON.stringify(String(needle))}`,
+    // 先按映像名缩小，避免全量 CIM 把 java 的 CommandLine 读丢或超时。
+    `$procs = Get-CimInstance -ClassName Win32_Process -Filter "Name='java.exe' OR Name='javaw.exe' OR Name='node.exe'"`,
+    `$procs | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($n) } | ForEach-Object { $_.ProcessId }`,
+  ].join("; ");
 }
 
 function listPidsByCommandLine(needle) {

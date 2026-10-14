@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { coreStartTimeoutMs } = require("../../electron/services/java-runtime.cjs");
+const { coreStartTimeoutMs, reclaimMarkers } = require("../../electron/services/java-runtime.cjs");
 const {
   descriptorWaitMs,
   appLaunchArgs,
@@ -37,6 +37,26 @@ test("Windows 安装冒烟给 Electron 加 --disable-gpu，避免无显示 runne
   assert.ok(
     appLaunchArgs(["--appimage-extract-and-run"], "linux").includes("--appimage-extract-and-run"),
   );
+});
+
+test("启动失败未占住目录时，stop 只按实例标记回收，不误杀同目录持锁进程", () => {
+  assert.deepEqual(
+    reclaimMarkers({
+      instanceId: "abc123",
+      dataDir: "C:\\\\tmp\\\\shared-core",
+      ownedDirectory: false,
+    }),
+    ["leximeet.instance=abc123"],
+  );
+  assert.deepEqual(
+    reclaimMarkers({
+      instanceId: "abc123",
+      dataDir: "C:\\\\tmp\\\\shared-core",
+      ownedDirectory: true,
+    }),
+    ["leximeet.instance=abc123", "C:\\\\tmp\\\\shared-core"],
+  );
+  assert.deepEqual(reclaimMarkers({ ownedDirectory: true, dataDir: "" }), []);
 });
 
 test("隔离冒烟会创建 Windows AppData 目录，避免 Electron getPath 失败", (t) => {

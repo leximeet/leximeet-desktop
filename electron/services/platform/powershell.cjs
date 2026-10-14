@@ -15,7 +15,7 @@ function runPowerShell(script, { timeout = 15000 } = {}) {
       "-ExecutionPolicy",
       "Bypass",
       "-EncodedCommand",
-      encodePowerShell(script),
+      encodePowerShell(`$ProgressPreference = 'SilentlyContinue'; ${script}`),
     ],
     { encoding: "utf8", windowsHide: true, timeout },
   );
