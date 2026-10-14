@@ -1,5 +1,4 @@
-修复：按 Codex 审查对齐 MCP stdio 与设置/配置边界
+维护：将 Core gitlink 更新为审查后的 895b7f3
 
-- stdio 改为官方换行分隔 JSON，不再使用 Content-Length
-- 测试连接不要求 clientId
-- Codex TOML 识别数组表，断开只删 leximeet
+- Core 三平台 CI 已通过
+- 纳入分页、例句、备份授权与 mutationId 回执修复
