@@ -225,16 +225,19 @@ function runMcpShim({
       replyLocal(message);
     }
   };
+  // 未就绪时套接字被拒/断开：清连接后走本地握手，避免 initialize 一直挂起。
+  const abandonConnect = () => {
+    const wasReady = ready;
+    dropSocket();
+    if (!wasReady) rejectOrLocal();
+  };
   const attachSocket = (descriptor) => {
     dropSocket();
     socket = net.connect(descriptor.socketPath);
     connectedPath = descriptor.socketPath;
     socketWriter = new FrameWriter(socket, { onError: () => finish("BACKPRESSURE_LIMIT", true) });
     const fromDesktop = new FrameDecoder();
-    timer = setTimeout(() => {
-      dropSocket();
-      rejectOrLocal();
-    }, connectTimeoutMs);
+    timer = setTimeout(abandonConnect, connectTimeoutMs);
     timer.unref();
     socket.on("connect", () =>
       socketWriter.send({ kind: "transport-auth", token: descriptor.token, clientId }),
@@ -242,8 +245,7 @@ function runMcpShim({
     fromDesktop.on("message", (message) => {
       if (!ready) {
         if (message?.kind !== "transport-ready" || message.instanceId !== descriptor.instanceId) {
-          dropSocket();
-          rejectOrLocal();
+          abandonConnect();
           return;
         }
         ready = true;
@@ -257,11 +259,11 @@ function runMcpShim({
     socket.on("data", (data) => fromDesktop.push(data));
     socket.on("end", () => {
       fromDesktop.finish();
-      dropSocket();
+      abandonConnect();
     });
-    socket.on("error", () => dropSocket());
+    socket.on("error", () => abandonConnect());
     socket.on("close", () => {
-      if (connectedPath === descriptor.socketPath) dropSocket();
+      if (connectedPath === descriptor.socketPath) abandonConnect();
     });
   };
   const ensureConnected = () => {

@@ -109,6 +109,28 @@ test("Codex TOML 只在 leximeet 表内判断状态与幂等", (t) => {
   assert.doesNotMatch(after, /mcp_servers\.leximeet/);
 });
 
+test("Codex 断开保留带行内注释的后续表头", (t) => {
+  const f = fixture(t);
+  const file = path.join(f.root, ".codex/config.toml");
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(
+    file,
+    [
+      "[mcp_servers.leximeet] # installed by leximeet",
+      `command = "${f.launch.command}"`,
+      "",
+      "[projects.foo] # user settings",
+      'path = "/keep/commented"',
+      "",
+    ].join("\n"),
+  );
+  removeCodex(file);
+  const after = fs.readFileSync(file, "utf8");
+  assert.match(after, /\[projects\.foo\] # user settings/);
+  assert.match(after, /\/keep\/commented/);
+  assert.doesNotMatch(after, /mcp_servers\.leximeet/);
+});
+
 test("Codex 断开不删除后续数组表", (t) => {
   const f = fixture(t);
   const file = path.join(f.root, ".codex/config.toml");

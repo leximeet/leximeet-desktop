@@ -14,9 +14,9 @@
 
 - MCP stdio 按官方规范改为换行分隔 JSON，不再使用 LSP 的 Content-Length。
 - 设置页「测试连接」不再误校验 clientId。
-- Codex TOML 写入/断开识别 `[[数组表]]`，不再删掉 leximeet 之后的用户配置。
+- Codex TOML 写入/断开识别 `[[数组表]]` 以及表头行内注释（如 `[projects.foo] # user settings`），不再删掉 leximeet 之后的用户配置。
 - 去掉无效的 `--run-as-node`；三家客户端只配置稳定启动脚本，由脚本导出 `ELECTRON_RUN_AS_NODE` 再 exec Electron。
-- 桌面未开时 `initialize` 仍成功，工具调用才返回 `DESKTOP_NOT_RUNNING`。
+- 桌面未开时 `initialize` 仍成功，工具调用才返回 `DESKTOP_NOT_RUNNING`。残留的陈旧 UDS 拒绝连接时同样走本地握手，不再挂起客户端。
 - Cursor 安装链接按官方文档对 `name`/`config` 做 `encodeURIComponent`；Codex CLI 接入后补写 `default_tools_approval_mode = "writes"`。
 
 ### 维护
