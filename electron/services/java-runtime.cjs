@@ -34,6 +34,18 @@ function startupFailure(stderr, exitCode) {
     : `本机核心无法启动（退出码 ${Number.isInteger(exitCode) ? exitCode : "未知"}）；请检查完整安装包，资料仍保存在本机`;
 }
 
+/** 收集子进程 stderr；Windows 上须等 close 才能读完，exit 时管道可能尚未排空。 */
+function attachStderr(child, { limit = 4000 } = {}) {
+  let diagnostic = "";
+  if (child.stderr) {
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk) => {
+      diagnostic = (diagnostic + chunk).slice(-limit);
+    });
+  }
+  return () => diagnostic;
+}
+
 function javaExecutable(env = process.env) {
   if (env.LEXIMEET_JAVA) return env.LEXIMEET_JAVA;
   if (env.JAVA_HOME)
@@ -135,10 +147,7 @@ class JavaRuntime {
       env: coreEnvironment(),
     });
     this.child = child;
-    let diagnostic = "";
-    child.stderr.on("data", (chunk) => {
-      diagnostic = (diagnostic + chunk.toString()).slice(-4000);
-    });
+    const readDiagnostic = attachStderr(child);
     const cleanup = () => {
       if (this.child === child) {
         this.port = null;
@@ -166,9 +175,11 @@ class JavaRuntime {
         child.once("error", () =>
           finish(new Error("无法启动随包 Java 21，请检查完整安装包与执行权限")),
         );
-        child.once("exit", (code) =>
+        child.once("close", (code) =>
           finish(
-            new Error(this.stopping ? "Java Core 启动已取消" : startupFailure(diagnostic, code)),
+            new Error(
+              this.stopping ? "Java Core 启动已取消" : startupFailure(readDiagnostic(), code),
+            ),
           ),
         );
         lines.on("line", (line) => {
@@ -358,4 +369,5 @@ module.exports = {
   coreEnvironment,
   startupFailure,
   coreStartTimeoutMs,
+  attachStderr,
 };
