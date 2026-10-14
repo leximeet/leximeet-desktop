@@ -125,6 +125,7 @@ class JavaRuntime {
     this.starting = null;
     this.stopping = false;
     this.state = "stopped";
+    this.instanceId = null;
     this.lastError = null;
     this.generation = 0;
   }
@@ -153,6 +154,7 @@ class JavaRuntime {
       throw new Error("业务测试时钟只能在隔离 test 环境使用");
     this.stopping = false;
     this.token = randomBytes(32).toString("hex");
+    this.instanceId = randomBytes(8).toString("hex");
     fs.mkdirSync(this.dataDir, { recursive: true, mode: 0o700 });
     // JAR 类可能延迟加载；运行副本防止开发中重建原 JAR 破坏已启动进程。
     const runDir = fs.mkdtempSync(path.join(this.dataDir, "runtime-"));
@@ -163,6 +165,7 @@ class JavaRuntime {
       "-Dfile.encoding=UTF-8",
       "-Dsun.stderr.encoding=UTF-8",
       "-Dsun.stdout.encoding=UTF-8",
+      `-Dleximeet.instance=${this.instanceId}`,
       `-Djava.io.tmpdir=${runDir}`,
       "-jar",
       runJar,
@@ -413,11 +416,14 @@ class JavaRuntime {
         }
       }
     }
-    if (this.dataDir) {
+    for (const marker of [
+      this.instanceId && `leximeet.instance=${this.instanceId}`,
+      this.dataDir,
+    ].filter(Boolean)) {
       try {
-        signalOwnedByMarker(this.dataDir);
+        signalOwnedByMarker(marker);
       } catch {
-        /* 按资料目录回收失败时仍走下面的 PID 等待 */
+        /* 按实例标记或资料目录回收失败时仍走下面的 PID 等待 */
       }
     }
     if (!child || !pid || child.exitCode !== null || child.signalCode !== null) return;

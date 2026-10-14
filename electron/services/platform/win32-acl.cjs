@@ -2,6 +2,7 @@
 const fs = require("node:fs");
 const { execFileSync } = require("node:child_process");
 const { currentWindowsAccount, currentWindowsSid } = require("./identity.cjs");
+const { runPowerShell } = require("./powershell.cjs");
 
 const FORBIDDEN_TRUSTEES = [
   /Everyone/i,
@@ -105,23 +106,21 @@ function restrictNamedPipe(pipePath) {
     "      bool present, defaulted; IntPtr dacl;",
     "      if (!GetSecurityDescriptorDacl(sd, out present, out dacl, out defaulted) || !present)",
     '        throw new InvalidOperationException("NO_DACL");',
-    "      int rc = SetNamedSecurityInfo(pipe, SE_KERNEL_OBJECT, DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION, IntPtr.Zero, IntPtr.Zero, dacl, IntPtr.Zero);",
-    "      if (rc != 0) throw new System.ComponentModel.Win32Exception(rc);",
+    '      var shortName = pipe.StartsWith(@"\\\\.\\pipe\\") ? pipe.Substring(9) : pipe;',
+    "      int last = 0;",
+    "      foreach (var name in new[] { pipe, shortName }) {",
+    "        int rc = SetNamedSecurityInfo(name, SE_KERNEL_OBJECT, DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION, IntPtr.Zero, IntPtr.Zero, dacl, IntPtr.Zero);",
+    "        if (rc == 0) return;",
+    "        last = rc;",
+    "      }",
+    "      throw new System.ComponentModel.Win32Exception(last);",
     "    } finally { LocalFree(sd); }",
     "  }",
     "}",
     "'@",
     `[LexiMeetPipeAcl]::Restrict(${JSON.stringify(pipePath)})`,
   ].join("\n");
-  execFileSync(
-    "powershell.exe",
-    ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
-    {
-      encoding: "utf8",
-      windowsHide: true,
-      timeout: 30000,
-    },
-  );
+  runPowerShell(script, { timeout: 30000 });
 }
 
 module.exports = {

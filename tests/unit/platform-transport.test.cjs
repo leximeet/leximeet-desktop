@@ -98,6 +98,23 @@ test("管道名只用短 ASCII，避免中文用户名超长", () => {
   assert.equal(transportKind("linux"), "uds");
 });
 
+test(
+  "Windows 命名管道 listen 后能收紧 DACL",
+  { timeout: 20000, skip: process.platform !== "win32" },
+  async (t) => {
+    const profileRoot = fs.mkdtempSync(path.join(os.tmpdir(), "leximeet-pipe-acl-"));
+    t.after(() => fs.rmSync(profileRoot, { recursive: true, force: true }));
+    const listened = await listenTransport({
+      purpose: "mcp",
+      profileRoot,
+      instanceId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    });
+    t.after(() => listened.close());
+    assert.equal(listened.kind, "named-pipe");
+    assert.match(listened.path, /^\\\\[.]\\pipe\\leximeet-mcp-/);
+  },
+);
+
 test("本机真实 listen/connect，错误令牌路径无法握手", { timeout: 15000 }, async (t) => {
   const profileRoot = fs.mkdtempSync(path.join(os.tmpdir(), "leximeet-transport-"));
   t.after(() => fs.rmSync(profileRoot, { recursive: true, force: true }));

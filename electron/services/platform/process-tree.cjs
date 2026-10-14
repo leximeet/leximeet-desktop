@@ -1,5 +1,6 @@
 "use strict";
 const { execFileSync } = require("node:child_process");
+const { runPowerShell } = require("./powershell.cjs");
 
 function parsePids(text) {
   return String(text || "")
@@ -116,18 +117,7 @@ function windowsCommandLineQuery(needle) {
 function listPidsByCommandLine(needle) {
   if (process.platform !== "win32" || !needle) return [];
   try {
-    const output = execFileSync(
-      "powershell.exe",
-      [
-        "-NoProfile",
-        "-NonInteractive",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        windowsCommandLineQuery(needle),
-      ],
-      { encoding: "utf8", windowsHide: true, timeout: 15000 },
-    );
+    const output = runPowerShell(windowsCommandLineQuery(needle));
     return parsePids(output).filter((pid) => pid !== process.pid);
   } catch {
     return [];
