@@ -26,7 +26,7 @@ function runIcacls(args, { timeout = 15000 } = {}) {
 function protectWindowsPath(target) {
   if (process.platform !== "win32") return target;
   const account = currentWindowsAccount();
-  runIcacls([target, "/inheritance:r", "/grant:r", `${account}:(F)`, "/Q"]);
+  runIcacls([target, "/inheritance:r", "/grant:r", `${account}:(OI)(CI)(F)`, "/Q"]);
   for (const group of [
     "Everyone",
     "Users",

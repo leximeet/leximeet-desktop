@@ -6,6 +6,7 @@ const { spawn, spawnSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
 const { once } = require("node:events");
 const gate = require("../../scripts/lib/connected-readiness.cjs");
+const { signalTree } = require("../../electron/services/platform/process-tree.cjs");
 const desktopRoot = path.resolve(__dirname, "../..");
 const browserRoot = path.resolve(desktopRoot, "../plugin/leximeet-browser");
 const REQUIRED_SCENARIOS = 9;
@@ -110,14 +111,14 @@ async function main() {
     if (!Number.isInteger(child.pid) || child.exitCode !== null || child.signalCode !== null)
       return;
     try {
-      process.kill(-child.pid, "SIGTERM");
+      signalTree(child.pid, "SIGTERM");
     } catch (error) {
       if (error.code !== "ESRCH") throw error;
     }
     forceTimer ||= setTimeout(() => {
       if (child.exitCode === null && child.signalCode === null)
         try {
-          process.kill(-child.pid, "SIGKILL");
+          signalTree(child.pid, "SIGKILL");
         } catch (error) {
           if (error.code !== "ESRCH") console.error(error.message);
         }

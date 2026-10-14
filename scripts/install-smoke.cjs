@@ -2,9 +2,10 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { spawn, spawnSync, execFileSync } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 const { backgroundEnvironment } = require("../tests/helpers/background-environment.cjs");
 const { mcpLauncherPath } = require("../electron/services/platform/app-paths.cjs");
+const { signalTree } = require("../electron/services/platform/process-tree.cjs");
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -174,9 +175,7 @@ async function main() {
   } finally {
     if (child.pid) {
       try {
-        if (process.platform === "win32")
-          execFileSync("taskkill", ["/PID", String(child.pid), "/T", "/F"]);
-        else process.kill(-child.pid, "SIGTERM");
+        signalTree(child.pid, "SIGKILL");
       } catch {
         try {
           child.kill();

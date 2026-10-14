@@ -19,6 +19,8 @@
 - Windows / Linux 的 core-cross 门禁先准备随包 Core 词典；lint 检出 `core-java` 以便核对文档链接。
 - Windows 单元测试不再依赖 POSIX 进程组或 inode 替换；`test:unit` 为单例加上时限，避免挂死占用整次作业。
 - Windows 路径断言、NTFS 权限、`whoami.exe` 与 ASAR 正斜杠抽取与本机语义对齐；非 macOS 不再要求系统焦点监测 complete。
+- 隔离目录回收在 Windows 上检查 NTFS ACL（拒绝 Everyone / Users / Authenticated Users），不再把缺少 POSIX 0o077 当成放行。
+- 停止本轮进程在 Windows 用 `taskkill /T`、macOS 按 PID 与子进程、Linux 仍用进程组；各平台都有「停止后子进程确实退出」的真实进程测试。
 
 ### 边界
 

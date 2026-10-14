@@ -1,16 +1,14 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { execFile } = require("node:child_process");
-const { promisify } = require("node:util");
 const { test: base, expect } = require("@playwright/test");
 const { _electron } = require("playwright");
 const { backgroundEnvironment } = require("./background-environment.cjs");
 const { startFocusMonitor } = require("./macos-focus-monitor.cjs");
 const { createBusinessClock } = require("./business-clock.cjs");
+const { signalTree, treeAlive } = require("../../electron/services/platform/process-tree.cjs");
 
 const root = path.resolve(__dirname, "../..");
-const execFileAsync = promisify(execFile);
 
 // 有界等待不占用事件循环；定时器会在任务提前完成时清理。
 async function bounded(promise, milliseconds, message) {
@@ -27,38 +25,20 @@ async function bounded(promise, milliseconds, message) {
   }
 }
 
-// Playwright 在 POSIX 创建独立进程组；兜底仅结束本例启动的树，不按名称扫描用户进程。
+// 兜底仅结束本例启动的树；Windows 用 taskkill /T，POSIX 用进程组或子 PID。不按名称扫描用户进程。
 async function forceOwnedProcess(child) {
   if (!child?.pid) return;
-  if (process.platform === "win32") {
-    if (child.exitCode !== null || child.signalCode !== null) return;
-    await execFileAsync("taskkill", ["/PID", String(child.pid), "/T", "/F"], {
-      timeout: 10000,
-      windowsHide: true,
-    });
-  } else {
-    try {
-      process.kill(-child.pid, "SIGKILL");
-    } catch (error) {
-      if (error.code !== "ESRCH") throw error;
-    }
-  }
+  signalTree(child.pid, "SIGKILL");
 }
 
-// 主进程已经退出时，POSIX 的进程组仍能标识本例遗留的 Java / renderer。
+// 主进程已经退出时，仍核验本例子进程树（Linux 进程组 / Windows taskkill 后的 PID / macOS 子进程）。
 async function assertOwnedGroupExited(child) {
-  if (process.platform === "win32" || !child?.pid) return;
+  if (!child?.pid) return;
   const deadline = Date.now() + 2000;
-  while (true) {
-    try {
-      process.kill(-child.pid, 0);
-    } catch (error) {
-      if (error.code === "ESRCH") return;
-      throw error;
-    }
+  while (treeAlive(child.pid)) {
     if (Date.now() >= deadline) {
       await forceOwnedProcess(child);
-      throw new Error("Electron 退出后本例进程组仍有残留；已强制清理，生命周期验收失败。");
+      throw new Error("Electron 退出后本例子进程仍有残留；已强制清理，生命周期验收失败。");
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }

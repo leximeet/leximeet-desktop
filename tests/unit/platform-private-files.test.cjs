@@ -57,3 +57,24 @@ test("Windows NTFS 用 icacls 去掉 Everyone/Users", (t) => {
   assert.doesNotMatch(listing, /Everyone/i);
   assert.doesNotMatch(listing, /BUILTIN\\Users/i);
 });
+
+test("Windows ACL 断言拒绝 Everyone、Users 与 Authenticated Users", (t) => {
+  if (process.platform !== "win32") return t.skip("需要真实 NTFS 与 icacls");
+  const { execFileSync } = require("node:child_process");
+  const { assertWindowsPrivate } = require("../../electron/services/platform/win32-acl.cjs");
+  const root = workspace(t);
+  const directory = path.join(root, "secret");
+  ensurePrivateDirectory(directory, { platform: "win32" });
+  assert.doesNotThrow(() => assertPrivate(directory, { directory: true, platform: "win32" }));
+  for (const trustee of ["Everyone", "*S-1-5-32-545", "*S-1-5-11"]) {
+    execFileSync("icacls", [directory, "/grant", `${trustee}:(R)`, "/Q"], {
+      windowsHide: true,
+    });
+    assert.throws(() => assertWindowsPrivate(directory), /UNSAFE_PRIVATE_PATH/);
+    execFileSync("icacls", [directory, "/remove:g", trustee, "/Q"], {
+      windowsHide: true,
+    });
+  }
+  ensurePrivateDirectory(directory, { platform: "win32" });
+  assert.doesNotThrow(() => assertWindowsPrivate(directory));
+});

@@ -230,10 +230,19 @@ async function verifyDesktopHandoff(page, options = {}) {
   );
 }
 
-// 只记录和结束本轮 spawn 的进程组；不按进程名称搜索系统。
+const processTree = require("../electron/services/platform/process-tree.cjs");
+
+// 只记录和结束本轮 spawn 的进程树；不按进程名称搜索系统。
 class OwnedProcesses {
-  constructor({ record, save, kill = process.kill, sleep = delay }) {
-    Object.assign(this, { record, save, kill, sleep });
+  constructor({
+    record,
+    save,
+    kill,
+    sleep = delay,
+    signalTree = processTree.signalTree,
+    treeAlive = processTree.treeAlive,
+  }) {
+    Object.assign(this, { record, save, kill, sleep, signalTree, treeAlive });
     this.children = new Map();
     this.stopping = null;
   }
@@ -270,22 +279,16 @@ class OwnedProcesses {
   signal(child, signal) {
     if (!this.alive(child) && !this.groupAlive(child)) return;
     try {
-      this.kill(process.platform === "win32" ? child.pid : -child.pid, signal);
+      if (this.kill) this.kill(process.platform === "linux" ? -child.pid : child.pid, signal);
+      else this.signalTree(child.pid, signal);
     } catch (error) {
       if (error.code !== "ESRCH" && error.code !== "EPERM") throw error;
     }
   }
   groupAlive(child) {
     if (!Number.isInteger(child.pid) || child.spawnError) return false;
-    if (process.platform === "win32") return this.alive(child);
-    try {
-      process.kill(-child.pid, 0);
-      return true;
-    } catch (error) {
-      if (error.code === "ESRCH") return false;
-      if (error.code === "EPERM") return true;
-      throw error;
-    }
+    if (this.kill) return this.alive(child);
+    return this.treeAlive(child.pid);
   }
   async stopChild(child) {
     if (!this.alive(child) && !this.groupAlive(child)) return;
@@ -357,15 +360,13 @@ async function startPackagedLab(
   signal?.throwIfAborted();
   const id = randomUUID(),
     directory = path.join(connectedSessionRoot(), id);
-  require("../electron/services/lmcp/private-files.cjs").ensurePrivateDirectory(
-    connectedSessionRoot(),
-  );
-  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  fs.chmodSync(directory, 0o700);
+  const { ensurePrivateDirectory } = require("../electron/services/lmcp/private-files.cjs");
+  ensurePrivateDirectory(connectedSessionRoot());
+  ensurePrivateDirectory(directory);
   const logsDir = path.join(directory, "logs");
-  fs.mkdirSync(logsDir, { mode: 0o700 });
+  ensurePrivateDirectory(logsDir);
   const profileRoot = path.join(directory, "desktop");
-  fs.mkdirSync(profileRoot, { mode: 0o700 });
+  ensurePrivateDirectory(profileRoot);
   const browserDataDir = path.join(profileRoot, "browser-profile/chrome");
   const extensionDir = path.join(directory, "browser-extension");
   const recordFile = path.join(directory, "acceptance.json");
@@ -497,7 +498,7 @@ async function startPackagedLab(
     if (alive()) {
       // PID 来自本轮创建的持久 Chromium CDP，不能按进程名称或日常 profile 清理。
       try {
-        process.kill(-pid, "SIGKILL");
+        processTree.signalTree(pid, "SIGKILL");
       } catch (error) {
         if (error.code !== "ESRCH") throw error;
       }

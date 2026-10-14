@@ -47,6 +47,8 @@ macOS 需要 Xcode Command Line Tools 的 `xcrun swiftc` 编译只读工具；�
 
 Windows / Linux 仍使用隐藏窗口、静音、受控输入和资源隔离，但本轮没有实现这些平台的系统前台应用监测；报告明确标记 `supported: false`，不冒称完成 macOS 同等验收。
 
+隔离会话回收在 POSIX 上拒绝组/其他可访问的目录；在 Windows 上改为检查 NTFS DACL，出现 Everyone、`BUILTIN\Users` 或 Authenticated Users 即保留资料。结束本轮进程时 Linux 向独立进程组发信号，Windows 使用 `taskkill /PID /T`，macOS 结束记录的 PID 及其子进程；单元测试在各平台生成真实子进程树，断言停止后子孙 PID 不存在。父进程先退出后的进程组回收仍只在 Linux 验证。
+
 ## 查看报告与验收边界
 
 当前桌面报告：`playwright-report/desktop-001`；实际应用包报告：`playwright-report/desktop-001-package`。每个启动会话附加：

@@ -1,0 +1,134 @@
+"use strict";
+const { execFileSync } = require("node:child_process");
+
+function parsePids(text) {
+  return String(text || "")
+    .split(/[\s,;]+/)
+    .map((value) => Number.parseInt(value, 10))
+    .filter((value) => Number.isInteger(value) && value > 1);
+}
+
+function pidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 1) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error.code === "ESRCH") return false;
+    return true;
+  }
+}
+
+function posixDirectChildren(pid) {
+  try {
+    const output = execFileSync("pgrep", ["-P", String(pid)], {
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    return parsePids(output);
+  } catch (error) {
+    if (error.status === 1 || error.code === "ENOENT") return [];
+    throw error;
+  }
+}
+
+function windowsDirectChildren(pid) {
+  const filter = `ParentProcessId=${pid}`;
+  const script = `(Get-CimInstance -ClassName Win32_Process -Filter ${JSON.stringify(filter)}).ProcessId`;
+  try {
+    const output = execFileSync(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+      { encoding: "utf8", windowsHide: true, timeout: 15000 },
+    );
+    return parsePids(output);
+  } catch {
+    return [];
+  }
+}
+
+function directChildren(pid) {
+  if (!Number.isInteger(pid) || pid <= 1) return [];
+  return process.platform === "win32" ? windowsDirectChildren(pid) : posixDirectChildren(pid);
+}
+
+function listDescendants(pid) {
+  const found = [];
+  const seen = new Set([pid]);
+  const queue = [pid];
+  while (queue.length) {
+    const current = queue.shift();
+    for (const child of directChildren(current)) {
+      if (seen.has(child)) continue;
+      seen.add(child);
+      found.push(child);
+      queue.push(child);
+    }
+  }
+  return found;
+}
+
+function linuxGroupAlive(pid) {
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch (error) {
+    if (error.code === "ESRCH") return false;
+    if (error.code === "EPERM") return true;
+    throw error;
+  }
+}
+
+function treeAlive(pid) {
+  if (pidAlive(pid)) return true;
+  if (process.platform === "linux" && linuxGroupAlive(pid)) return true;
+  return listDescendants(pid).some(pidAlive);
+}
+
+function posixSignal(pid, signal) {
+  try {
+    process.kill(pid, signal);
+  } catch (error) {
+    if (error.code !== "ESRCH" && error.code !== "EPERM") throw error;
+  }
+}
+
+function windowsTaskkill(pid, force) {
+  if (!Number.isInteger(pid) || pid <= 1) return;
+  const args = ["/PID", String(pid), "/T"];
+  if (force) args.push("/F");
+  try {
+    execFileSync("taskkill", args, {
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 15000,
+    });
+  } catch (error) {
+    if (pidAlive(pid) && force) throw new Error(`taskkill 未能结束进程树 ${pid}：${error.message}`);
+  }
+}
+
+/**
+ * 结束本轮持有的进程树：Linux 用进程组，Windows 用 taskkill /T，macOS 按 PID 与子进程。
+ * 不按进程名称搜索，也不向其他用户的进程发信号。
+ */
+function signalTree(pid, signal = "SIGTERM") {
+  if (!Number.isInteger(pid) || pid <= 1) return;
+  const descendants = listDescendants(pid);
+  if (process.platform === "win32") {
+    windowsTaskkill(pid, true);
+    for (const child of descendants) {
+      if (pidAlive(child)) windowsTaskkill(child, true);
+    }
+    return;
+  }
+  if (process.platform === "linux") posixSignal(-pid, signal);
+  for (const target of [pid, ...descendants]) posixSignal(target, signal);
+}
+
+module.exports = {
+  pidAlive,
+  treeAlive,
+  listDescendants,
+  signalTree,
+};
