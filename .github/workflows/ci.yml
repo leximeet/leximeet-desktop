@@ -327,11 +327,16 @@ jobs:
       - name: Confirm Windows Defender stays on for first launch
         shell: pwsh
         run: |
-          $status = Get-MpComputerStatus
-          if (-not $status.RealTimeProtectionEnabled) {
-            throw "install-smoke 须在 Defender 实时保护开启时验证安装后启动，不能排除扫描"
+          # 对齐真实用户：打开实时保护，不排除工作区或安装目录。
+          foreach ($i in 1..6) {
+            try { Set-MpPreference -DisableRealtimeMonitoring $false } catch { Write-Warning $_ }
+            try { Set-MpPreference -DisableIOAVProtection $false } catch { Write-Warning $_ }
+            $status = Get-MpComputerStatus
+            Write-Host "attempt=$i RealTimeProtectionEnabled=$($status.RealTimeProtectionEnabled) AntivirusEnabled=$($status.AntivirusEnabled)"
+            if ($status.RealTimeProtectionEnabled) { exit 0 }
+            Start-Sleep -Seconds 2
           }
-          Write-Host "RealTimeProtectionEnabled=$($status.RealTimeProtectionEnabled)"
+          throw "install-smoke 须在 Defender 实时保护开启时验证安装后启动，不能排除扫描"
       - name: L2 install, start, Core/MCP, uninstall
         run: node scripts/install-smoke.cjs
 

@@ -64,23 +64,10 @@ function readLogTail(file, limit = 4000) {
   }
 }
 
-/** Windows 优先 javaw。隐藏 java.exe 控制台会另开控制台，System.err 不再写入重定向文件。 */
-function preferWindowlessJava(
-  java,
-  { platform = process.platform, exists = (file) => fs.existsSync(file), env = process.env } = {},
-) {
+/** Windows 必须用控制台子系统的 java.exe。javaw 会脱离父进程：stderr 丢失，stop 也杀不到 JVM。 */
+function preferWindowlessJava(java, { platform = process.platform } = {}) {
   if (platform !== "win32" || typeof java !== "string") return java;
-  if (/javaw(\.exe)?$/i.test(java)) return java;
-  const named = /\.exe$/i.test(java) ? java : `${java}.exe`;
-  if (/java\.exe$/i.test(named)) {
-    const sibling = `${named.slice(0, -"java.exe".length)}javaw.exe`;
-    if (exists(sibling)) return sibling;
-  }
-  if (!path.isAbsolute(java) && env.JAVA_HOME) {
-    const home = path.join(env.JAVA_HOME, "bin", "javaw.exe");
-    if (exists(home)) return home;
-  }
-  return java;
+  return java.replace(/javaw(?=\.exe$|$)/i, "java");
 }
 
 function spawnJava(java, args, env, stderrFile) {
@@ -88,8 +75,8 @@ function spawnJava(java, args, env, stderrFile) {
   const stderrFd = fs.openSync(stderrFile, "w", 0o600);
   const child = spawn(executable, args, {
     stdio: ["ignore", "pipe", stderrFd],
-    // 无窗口靠 javaw。父进程立刻关掉自己的 stderr 副本；留到 close 再关会在 Windows 上死锁。
-    windowsHide: false,
+    // CREATE_NO_WINDOW + 重定向句柄，对齐 Core MainProcessTest 的文件 stderr。
+    windowsHide: true,
     env,
   });
   fs.closeSync(stderrFd);

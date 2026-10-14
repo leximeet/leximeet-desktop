@@ -224,6 +224,9 @@ test("同目录重复管理器启动失败，不影响已持有目录锁的原�
   });
   // 验证的是退出后的及时拒绝，不把 JDK 冷启动、类加载和磁盘竞争当成生命周期错误。
   await assert.rejects(starting, (error) => {
+    if (!/DATA_IN_USE/.test(error.message)) {
+      console.error("duplicate start 未得到 DATA_IN_USE：", error.message);
+    }
     assert.match(error.message, /DATA_IN_USE/);
     assert.match(error.message, /另一应用使用/);
     assert.doesNotMatch(error.message, new RegExp(first.runtime.token));

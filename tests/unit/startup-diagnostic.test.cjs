@@ -90,28 +90,12 @@ test("stderr 文件按 UTF-16LE 回退仍能读到固定分类码", (t) => {
   assert.match(startupFailure(readLogTail(file), 1), /另一应用使用/);
 });
 
-test("Windows 优先选用旁边的 javaw，其它平台保持原路径", (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "leximeet-javaw-"));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const java = path.join(root, "java.exe");
-  const javaw = path.join(root, "javaw.exe");
-  fs.writeFileSync(java, "");
-  fs.writeFileSync(javaw, "");
-  const exists = (file) => fs.existsSync(file);
-  assert.equal(preferWindowlessJava(java, { platform: "linux", exists }), java);
-  assert.equal(preferWindowlessJava(java, { platform: "win32", exists }), javaw);
-  assert.equal(preferWindowlessJava(path.join(root, "java"), { platform: "win32", exists }), javaw);
-  assert.equal(preferWindowlessJava(javaw, { platform: "win32", exists }), javaw);
-  assert.equal(
-    preferWindowlessJava("java", {
-      platform: "win32",
-      exists: (file) => file === path.join(root, "bin", "javaw.exe"),
-      env: { JAVA_HOME: root },
-    }),
-    path.join(root, "bin", "javaw.exe"),
-  );
-  assert.equal(
-    preferWindowlessJava(path.join(root, "missing-java.exe"), { platform: "win32", exists }),
-    path.join(root, "missing-java.exe"),
-  );
+test("Windows 用 java.exe 保持父进程附加，不改用 javaw", () => {
+  const java = "C:/runtime/bin/java.exe";
+  const javaw = "C:/runtime/bin/javaw.exe";
+  assert.equal(preferWindowlessJava(java, { platform: "linux" }), java);
+  assert.equal(preferWindowlessJava(java, { platform: "win32" }), java);
+  assert.equal(preferWindowlessJava(javaw, { platform: "win32" }), java);
+  assert.equal(preferWindowlessJava("javaw", { platform: "win32" }), "java");
+  assert.equal(preferWindowlessJava("java", { platform: "win32" }), "java");
 });
