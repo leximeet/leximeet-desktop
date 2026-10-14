@@ -90,8 +90,8 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.13"
-      - name: Keep Windows Defender off Core SQLite copies
-        if: runner.os == 'Windows'
+      - name: Exclude Defender from Core unit-test copies only
+        if: ${{ runner.os == 'Windows' && matrix.suite == 'core-cross' }}
         shell: pwsh
         run: |
           $tmp = Join-Path "${{ github.workspace }}" ".runtime/ci-tmp"
@@ -242,6 +242,15 @@ jobs:
           NODE
         env:
           KIND: ${{ matrix.kind }}
+      - name: Confirm Windows Defender stays on for first launch
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $status = Get-MpComputerStatus
+          if (-not $status.RealTimeProtectionEnabled) {
+            throw "install-smoke 须在 Defender 实时保护开启时验证安装后启动，不能排除扫描"
+          }
+          Write-Host "RealTimeProtectionEnabled=$($status.RealTimeProtectionEnabled)"
       - name: L2 install, start, Core/MCP, uninstall
         run: |
           if [ "$RUNNER_OS" = Linux ]; then

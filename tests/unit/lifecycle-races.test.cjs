@@ -184,7 +184,10 @@ function mainFixture(t, options = {}) {
     },
     "./services/profiles.cjs": { resolveProfile: () => profile },
     "./services/background-test.cjs": require("../../electron/services/background-test.cjs"),
-    "./services/java-runtime.cjs": { JavaRuntime: Core },
+    "./services/java-runtime.cjs": {
+      JavaRuntime: Core,
+      coreStartTimeoutMs: require("../../electron/services/java-runtime.cjs").coreStartTimeoutMs,
+    },
     "./services/text-dictionary.cjs": {
       TextDictionaryService: class {
         async ensure() {

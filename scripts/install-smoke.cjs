@@ -6,6 +6,12 @@ const { spawn, spawnSync } = require("node:child_process");
 const { backgroundEnvironment } = require("../tests/helpers/background-environment.cjs");
 const { mcpLauncherPath } = require("../electron/services/platform/app-paths.cjs");
 const { signalTree } = require("../electron/services/platform/process-tree.cjs");
+const { coreStartTimeoutMs } = require("../electron/services/java-runtime.cjs");
+
+/** 冒烟等待须长于产品握手期限，才能观察到真实启动超时，而不是测试先放弃。 */
+function descriptorWaitMs(platform = process.platform) {
+  return Math.max(90000, coreStartTimeoutMs(platform) + 30000);
+}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -149,7 +155,7 @@ async function main() {
         const file = path.join(profileDir, "mcp", "mcp-uds.json");
         return fs.existsSync(file) ? file : "";
       },
-      90000,
+      descriptorWaitMs(),
       "Core / MCP 描述符",
     );
     const healthLog = path.join(profileDir, "logs");
@@ -198,4 +204,4 @@ if (require.main === module)
     console.error(error.message);
     process.exitCode = 1;
   });
-module.exports = { main, kindOf };
+module.exports = { main, kindOf, descriptorWaitMs };

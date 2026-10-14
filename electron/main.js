@@ -27,7 +27,7 @@ const backgroundTest = installBackgroundTest({
 });
 if (backgroundTest) globalThis.__leximeetTestBackground = backgroundTest;
 const { resolveProfile } = require("./services/profiles.cjs");
-const { JavaRuntime } = require("./services/java-runtime.cjs");
+const { JavaRuntime, coreStartTimeoutMs } = require("./services/java-runtime.cjs");
 const { LmcpGateway } = require("./services/lmcp/gateway.cjs");
 const { ConnectionSettings } = require("./services/connection-settings.cjs");
 const { McpGateway } = require("./services/mcp/gateway.cjs");
@@ -82,8 +82,8 @@ const core = new JavaRuntime({
   profile: profile.name,
   testClockFile: process.env.LEXIMEET_TEST_CLOCK_FILE || "",
   demo: ["demo", "test"].includes(profile.name) && process.env.LEXIMEET_SEED_DEMO === "1",
-  // 连续隔离启动出现过 20s 冷启动超时；保留有界期限，给类加载和原生库解压留余量。
-  timeout: 45000,
+  // 连续隔离启动出现过 20s 冷启动超时；Windows 首次启动另加 Defender 扫描 Jar/JRE 的有界余量，不自动重试。
+  timeout: coreStartTimeoutMs(),
 });
 const { ElectronEgg } = require("ee-core");
 const { getMainWindow } = require("ee-core/electron");

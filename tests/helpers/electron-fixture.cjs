@@ -7,6 +7,7 @@ const { backgroundEnvironment } = require("./background-environment.cjs");
 const { startFocusMonitor } = require("./macos-focus-monitor.cjs");
 const { createBusinessClock } = require("./business-clock.cjs");
 const { signalTree, treeAlive } = require("../../electron/services/platform/process-tree.cjs");
+const { coreStartTimeoutMs } = require("../../electron/services/java-runtime.cjs");
 
 const root = path.resolve(__dirname, "../..");
 
@@ -132,8 +133,11 @@ function createDesktopFactory(testInfo) {
         process.platform === "win32" ? "java.exe" : "java",
       );
     }
-    // 覆盖 Main 的 45s 冷启动期限和词典装配；不靠自动重试掩盖失败。
-    const launchTimeout = Number(extraEnv.LEXIMEET_TEST_SEED_INDEX) > 0 ? 120000 : 60000;
+    // 覆盖 Main 的平台握手期限和词典装配；不靠自动重试掩盖失败。
+    const launchTimeout =
+      Number(extraEnv.LEXIMEET_TEST_SEED_INDEX) > 0
+        ? Math.max(120000, coreStartTimeoutMs() + 15000)
+        : Math.max(60000, coreStartTimeoutMs() + 15000);
     let app;
     let child;
     let session;

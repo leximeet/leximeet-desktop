@@ -41,6 +41,11 @@ function javaExecutable(env = process.env) {
   return "java";
 }
 
+/** 产品等待 Core 写出端口的有界期限。Windows 首次启动会复制 Jar、拉起随包 JRE，Defender 实时扫描这些新文件。 */
+function coreStartTimeoutMs(platform = process.platform) {
+  return platform === "win32" ? 120000 : 45000;
+}
+
 // 主进程持有一次性令牌与动态端口；两者均不暴露给 renderer。
 class JavaRuntime {
   constructor({
@@ -346,4 +351,11 @@ function requestBudget(route, body) {
   const method = body?.envelope?.method;
   return ["recordEncounter", "openInDesktop"].includes(method) ? 15000 : 5000;
 }
-module.exports = { JavaRuntime, javaExecutable, requestBudget, coreEnvironment, startupFailure };
+module.exports = {
+  JavaRuntime,
+  javaExecutable,
+  requestBudget,
+  coreEnvironment,
+  startupFailure,
+  coreStartTimeoutMs,
+};
