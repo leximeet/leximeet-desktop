@@ -23,6 +23,17 @@ test("命名管道 ACL 脚本用环境变量传路径，不用 JSON.stringify �
   assert.equal(script.includes(JSON.stringify(pipe)), false);
 });
 
+test("命名管道 ACL 先按 SE_FILE_OBJECT 找 \\\\.\\pipe\\ 名，再回退内核对象", () => {
+  const script = namedPipeAclScript("Restrict");
+  assert.match(script, /SE_FILE_OBJECT = 1/);
+  assert.match(script, /SE_KERNEL_OBJECT = 6/);
+  assert.match(script, /foreach \(var type in Types\(\)\)/);
+  assert.match(script, /prefix = @"\\\\\.\\pipe\\"/);
+  const inspect = namedPipeAclScript("Inspect");
+  assert.match(inspect, /SE_FILE_OBJECT = 1/);
+  assert.match(inspect, /foreach \(var type in Types\(\)\)/);
+});
+
 test("icacls / reg / whoami / taskkill 固定 System32 根下的完整路径", () => {
   for (const name of ["icacls.exe", "reg.exe", "whoami.exe", "taskkill.exe"]) {
     const resolved = windowsSystem32Binary(name);

@@ -163,7 +163,9 @@ int main(void) {
     return 0;
   }
   if (argc >= 3 && wcscmp(argv[1], L"--set-pipe-acl") == 0) {
-    DWORD rc = apply_current_user_dacl(argv[2], SE_KERNEL_OBJECT);
+    /* 命名管道按 MSDN 是 SE_FILE_OBJECT（\\\\.\\pipe\\<名>）；内核对象类型找不到管道。 */
+    DWORD rc = apply_current_user_dacl(argv[2], SE_FILE_OBJECT);
+    if (rc != ERROR_SUCCESS) rc = apply_current_user_dacl(argv[2], SE_KERNEL_OBJECT);
     LocalFree(argv);
     if (rc != ERROR_SUCCESS) fail(L"SET_PIPE_ACL");
     return 0;
