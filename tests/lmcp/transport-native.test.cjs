@@ -793,7 +793,15 @@ test("注册与撤销只管理自身清单，不覆盖或删除另一份 Host", 
   const saved = fs.readFileSync(f.registration.manifestPath);
   fs.writeFileSync(f.registration.manifestPath, "changed", { mode: 0o600 });
   assert.throws(() => unregisterNativeHost(f.registration), /NATIVE_REGISTRATION_CHANGED/);
-  assert.equal(fs.readFileSync(f.registration.launcher, "utf8").includes("NODE_OPTIONS"), true);
+  if (process.platform === "win32") {
+    // Windows 启动器是 PE stub，清除 NODE_OPTIONS 在 C 源里，不在可执行文件文本中。
+    const bytes = fs.readFileSync(f.registration.launcher);
+    assert.equal(bytes[0], 0x4d);
+    assert.equal(bytes[1], 0x5a);
+    assert.equal(fs.existsSync(`${f.registration.launcher}.launch`), true);
+  } else {
+    assert.equal(fs.readFileSync(f.registration.launcher, "utf8").includes("NODE_OPTIONS"), true);
+  }
   fs.writeFileSync(f.registration.manifestPath, saved, { mode: 0o600 });
   assert.throws(
     () =>
