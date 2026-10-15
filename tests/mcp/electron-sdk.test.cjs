@@ -29,7 +29,8 @@ test(
     fs.mkdirSync(bin, { recursive: true });
     const electron = electronBinary();
     const shim = path.resolve(__dirname, "../../electron/mcp-host/main.cjs");
-    const launch = launchConfig(electron, shim, home);
+    const projectDir = path.resolve(__dirname, "../..");
+    const launch = launchConfig(electron, shim, home, { projectDir });
     const claudeConfig = path.join(home, ".claude.json");
     fs.writeFileSync(
       path.join(bin, "claude"),
@@ -47,7 +48,7 @@ test(
       shimPath: shim,
       env: { PATH: bin },
       preferCli: process.platform !== "win32",
-      projectDir: path.resolve(__dirname, "../.."),
+      projectDir,
     });
     if (process.platform !== "win32") assert.equal(cli.method, "cli");
     const written = JSON.parse(fs.readFileSync(claudeConfig, "utf8"));

@@ -311,6 +311,8 @@ const assistantSettings = new AssistantSettings({
   shimPath: mcpShimPath,
   homeDir: app.getPath("home"),
   openExternal: (url) => shell.openExternal(url),
+  resourcesPath: app.isPackaged ? process.resourcesPath : undefined,
+  projectDir,
 });
 const browserDiscovery = new BrowserDiscovery({
   profile,

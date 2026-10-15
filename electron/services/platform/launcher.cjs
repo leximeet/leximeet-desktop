@@ -11,8 +11,19 @@ function findPeStub({ stubPath, resourcesPath, projectDir } = {}) {
     resourcesPath && path.join(resourcesPath, "native", "leximeet-run-as-node.exe"),
     projectDir && path.join(projectDir, "resources", "native", "leximeet-run-as-node.exe"),
     projectDir && path.join(projectDir, ".runtime", "native", "leximeet-run-as-node.exe"),
-  ].filter(Boolean);
-  for (const file of candidates) if (fs.existsSync(file)) return file;
+  ];
+  // 调用方没指定任何根时，按打包 resources 与本仓库位置回退（设置页 / 测试夹具）。
+  if (!stubPath && !resourcesPath && !projectDir) {
+    const repoRoot = path.resolve(__dirname, "../../..");
+    if (typeof process.resourcesPath === "string" && process.resourcesPath) {
+      candidates.push(path.join(process.resourcesPath, "native", "leximeet-run-as-node.exe"));
+    }
+    candidates.push(
+      path.join(repoRoot, "resources", "native", "leximeet-run-as-node.exe"),
+      path.join(repoRoot, ".runtime", "native", "leximeet-run-as-node.exe"),
+    );
+  }
+  for (const file of candidates.filter(Boolean)) if (fs.existsSync(file)) return file;
   return "";
 }
 
@@ -24,8 +35,16 @@ function writeLaunchSidecar(launcher, { electronExecutable, shimPath, prefixArgs
   return sidecar;
 }
 
-function ensurePosixLauncher({ homeDir, electronExecutable, shimPath, prefixArgs = [], platform }) {
-  const file = mcpLauncherPath({ homeDir, platform });
+function ensurePosixLauncher({
+  homeDir,
+  electronExecutable,
+  shimPath,
+  prefixArgs = [],
+  platform,
+  env,
+  appData,
+}) {
+  const file = mcpLauncherPath({ homeDir, platform, env, appData });
   ensurePrivateDirectory(path.dirname(file));
   const extras = prefixArgs.map((arg) => posixQuote(arg)).join(" ");
   const text = [
@@ -49,10 +68,12 @@ function ensureWindowsLauncher({
   stubPath,
   resourcesPath,
   projectDir,
+  env,
+  appData,
 }) {
   const stub = findPeStub({ stubPath, resourcesPath, projectDir });
   if (!stub) throw new Error("WINDOWS_PE_STUB_MISSING");
-  const file = mcpLauncherPath({ homeDir, platform: "win32" });
+  const file = mcpLauncherPath({ homeDir, platform: "win32", env, appData });
   ensurePrivateDirectory(path.dirname(file), { platform: "win32" });
   fs.copyFileSync(stub, file);
   writeLaunchSidecar(file, { electronExecutable, shimPath, prefixArgs });
@@ -95,6 +116,8 @@ function ensureLauncher({
   stubPath,
   resourcesPath,
   projectDir,
+  env,
+  appData,
 }) {
   if (!path.isAbsolute(electronExecutable || "") || !path.isAbsolute(shimPath || ""))
     throw new Error("MCP_LAUNCH_PATHS_MUST_BE_ABSOLUTE");
@@ -107,8 +130,18 @@ function ensureLauncher({
       stubPath,
       resourcesPath,
       projectDir,
+      env,
+      appData,
     });
-  return ensurePosixLauncher({ homeDir, electronExecutable, shimPath, prefixArgs, platform });
+  return ensurePosixLauncher({
+    homeDir,
+    electronExecutable,
+    shimPath,
+    prefixArgs,
+    platform,
+    env,
+    appData,
+  });
 }
 
 function readLaunchSidecar(launcher) {

@@ -42,6 +42,10 @@ test("资料与 MCP 指针按平台落到 appData，不把 Windows 写成 ~/.con
     mcpLauncherPath({ homeDir: HOME, platform: "linux", env: {} }),
     path.join(HOME, ".config", "LexiMeet", "mcp", "leximeet-mcp"),
   );
+  assert.equal(
+    appDataRoot({ homeDir: WIN_HOME, platform: "win32" }),
+    path.join(WIN_HOME, "AppData", "Roaming", "LexiMeet"),
+  );
   assert.equal(path.basename(mcpDir({ homeDir: HOME, platform: "darwin" })), "mcp");
 });
 

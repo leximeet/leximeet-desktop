@@ -7,6 +7,7 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const {
   ensureLauncher,
+  findPeStub,
   writeNativeLauncher,
   readLaunchSidecar,
 } = require("../../electron/services/platform/launcher.cjs");
@@ -59,6 +60,18 @@ test("Windows 启动器复制 PE stub 并写 sidecar，不用 .cmd", (t) => {
   assert.equal(sidecar.electron, f.electron);
   assert.equal(sidecar.script, f.shim);
   assert.equal(fs.existsSync(`${file}.cmd`), false);
+});
+
+test("未指定查找根时回退仓库 resources 与 .runtime/native", () => {
+  const repo = path.resolve(__dirname, "../..");
+  const runtime = path.join(repo, ".runtime", "native", "leximeet-run-as-node.exe");
+  const bundled = path.join(repo, "resources", "native", "leximeet-run-as-node.exe");
+  const found = findPeStub();
+  if (fs.existsSync(runtime) || fs.existsSync(bundled)) {
+    assert.ok(found === runtime || found === bundled);
+    return;
+  }
+  assert.equal(found, "");
 });
 
 test("缺少 PE stub 时 Windows 启动器明确失败，不降级到 cmd", (t) => {

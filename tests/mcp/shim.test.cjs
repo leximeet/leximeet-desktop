@@ -55,6 +55,7 @@ test("桌面未运行时 initialize 仍成功，工具调用才返回 DESKTOP_NO
 });
 
 test("陈旧套接字拒绝连接时 initialize 仍本地完成", async (t) => {
+  if (process.platform === "win32") return t.skip("Windows 本机通道是命名管道，没有残留 UDS 文件");
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "leximeet-mcp-stale-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const socketDir = path.join(root, "sockets");

@@ -21,6 +21,29 @@ const {
   paths,
 } = require("../../electron/services/mcp/client-config.cjs");
 
+const PROJECT_DIR = path.resolve(__dirname, "../..");
+
+function launchOptions(extra = {}) {
+  return { projectDir: PROJECT_DIR, ...extra };
+}
+
+function assertManagedLauncher(command) {
+  if (process.platform === "win32") {
+    const header = fs.readFileSync(command).subarray(0, 2);
+    assert.equal(header[0], 0x4d);
+    assert.equal(header[1], 0x5a);
+    const sidecar = fs.readFileSync(`${command}.launch`, "utf8");
+    assert.match(sidecar, /^electron=/m);
+    assert.match(sidecar, /^script=/m);
+    assert.doesNotMatch(sidecar, /--run-as-node/);
+    return;
+  }
+  const script = fs.readFileSync(command, "utf8");
+  assert.match(script, /ELECTRON_RUN_AS_NODE=1/);
+  assert.match(script, /exec /);
+  assert.doesNotMatch(script, /--run-as-node/);
+}
+
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "leximeet-mcp-config-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -30,7 +53,7 @@ function fixture(t) {
   fs.mkdirSync(path.dirname(shim), { recursive: true });
   fs.writeFileSync(electron, "#!/bin/sh\n");
   fs.writeFileSync(shim, "shim");
-  return { root, electron, shim, launch: launchConfig(electron, shim, root) };
+  return { root, electron, shim, launch: launchConfig(electron, shim, root, launchOptions()) };
 }
 
 test("Cursor 写入只改 leximeet 键，只配启动脚本，幂等且先备份", (t) => {
@@ -51,9 +74,7 @@ test("Cursor 写入只改 leximeet 键，只配启动脚本，幂等且先备份
   assert.deepEqual(data.mcpServers.leximeet.args, []);
   assert.equal(data.mcpServers.leximeet.env, undefined);
   assert.doesNotMatch(JSON.stringify(data), /token|secret|--run-as-node/i);
-  const script = fs.readFileSync(f.launch.command, "utf8");
-  assert.match(script, /ELECTRON_RUN_AS_NODE=1/);
-  assert.match(script, /exec /);
+  assertManagedLauncher(f.launch.command);
   const backups = fs
     .readdirSync(path.dirname(file))
     .filter((name) => name.includes(".leximeet.bak."));
@@ -87,8 +108,8 @@ test("Codex TOML 只在 leximeet 表内判断状态与幂等", (t) => {
       "",
     ].join("\n"),
   );
-  writeCodex(file, launchConfig(f.electron, f.shim, f.root));
-  writeCodex(file, launchConfig(f.electron, f.shim, f.root));
+  writeCodex(file, launchConfig(f.electron, f.shim, f.root, launchOptions()));
+  writeCodex(file, launchConfig(f.electron, f.shim, f.root, launchOptions()));
   const text = fs.readFileSync(file, "utf8");
   assert.match(text, /# 用户注释必须保留/);
   assert.match(text, /command = "\/missing\/other"/);
@@ -102,6 +123,7 @@ test("Codex TOML 只在 leximeet 表内判断状态与幂等", (t) => {
     electronExecutable: f.electron,
     shimPath: f.shim,
     env: { PATH: "/no-such-bin" },
+    ...launchOptions(),
   });
   assert.equal(inspected.status, "connected");
   assert.equal(inspected.broken, false);
@@ -213,7 +235,7 @@ test("Codex 断开不删除后续数组表", (t) => {
 test("Claude Code 写入 user 级 mcpServers 且可干净断开", (t) => {
   const f = fixture(t);
   const file = path.join(f.root, ".claude.json");
-  writeClaude(file, launchConfig(f.electron, f.shim, f.root));
+  writeClaude(file, launchConfig(f.electron, f.shim, f.root, launchOptions()));
   const data = JSON.parse(fs.readFileSync(file, "utf8"));
   assert.equal(data.mcpServers.leximeet.type, "stdio");
   assert.equal(data.mcpServers.leximeet.command, launcherPath(f.root));
@@ -229,6 +251,7 @@ test("检测状态覆盖未安装、可接入与已接入", (t) => {
     electronExecutable: f.electron,
     shimPath: f.shim,
     env: { PATH: "/no-such-bin" },
+    ...launchOptions(),
   });
   assert.equal(missing.status, "missing");
   fs.mkdirSync(path.join(f.root, ".cursor"), { recursive: true });
@@ -237,6 +260,7 @@ test("检测状态覆盖未安装、可接入与已接入", (t) => {
     electronExecutable: f.electron,
     shimPath: f.shim,
     env: { PATH: "/no-such-bin" },
+    ...launchOptions(),
   });
   assert.equal(available.status, "available");
   connect("cursor", {
@@ -245,12 +269,14 @@ test("检测状态覆盖未安装、可接入与已接入", (t) => {
     shimPath: f.shim,
     env: { PATH: "/no-such-bin" },
     preferCli: false,
+    ...launchOptions(),
   });
   const connected = inspectClient("cursor", {
     homeDir: f.root,
     electronExecutable: f.electron,
     shimPath: f.shim,
     env: { PATH: "/no-such-bin" },
+    ...launchOptions(),
   });
   assert.equal(connected.status, "connected");
   assert.match(
@@ -310,9 +336,10 @@ test("Codex CLI 接入后补写 writes 批准且只配启动脚本", (t) => {
     electronExecutable: f.electron,
     shimPath: f.shim,
     env: { PATH: bin },
-    preferCli: true,
+    preferCli: process.platform !== "win32",
+    ...launchOptions(),
   });
-  assert.equal(result.method, "cli");
+  if (process.platform !== "win32") assert.equal(result.method, "cli");
   const text = fs.readFileSync(config, "utf8");
   assert.match(text, /default_tools_approval_mode = "writes"/);
   assert.match(text, new RegExp(f.launch.command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));

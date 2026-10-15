@@ -40,6 +40,8 @@ function launchConfig(electronExecutable, shimPath, homeDir, options = {}) {
       stubPath: options.stubPath,
       resourcesPath: options.resourcesPath,
       projectDir: options.projectDir,
+      env: options.env,
+      appData: options.appData,
     }),
     args: [],
   };
@@ -330,7 +332,8 @@ function removeClaude(file) {
   });
 }
 
-function inspectClient(id, { homeDir, electronExecutable, shimPath, env = process.env }) {
+function inspectClient(id, options = {}) {
+  const { homeDir, electronExecutable, shimPath, env = process.env } = options;
   const file = paths(homeDir)[id];
   const installed = fs.existsSync(path.dirname(file)) || Boolean(resolveClientBinary(id, { env }));
   let connected = false;
@@ -359,7 +362,9 @@ function inspectClient(id, { homeDir, electronExecutable, shimPath, env = proces
   else if (connected) status = "connected";
   else if (installed) status = "available";
   const desired =
-    electronExecutable && shimPath ? launchConfig(electronExecutable, shimPath, homeDir) : null;
+    electronExecutable && shimPath
+      ? launchConfig(electronExecutable, shimPath, homeDir, options)
+      : null;
   return {
     id,
     status,

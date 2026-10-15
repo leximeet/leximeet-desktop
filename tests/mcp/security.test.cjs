@@ -14,12 +14,24 @@ test("客户端配置只写启动脚本，不含 --run-as-node 或 Core 令牌",
   fs.writeFileSync(electron, "bin");
   fs.writeFileSync(shim, "shim");
   const file = path.join(root, "mcp.json");
-  const launch = launchConfig(electron, shim, root);
+  const launch = launchConfig(electron, shim, root, {
+    projectDir: path.resolve(__dirname, "../.."),
+  });
   writeCursor(file, launch);
   const text = fs.readFileSync(file, "utf8");
   assert.doesNotMatch(text, /Bearer|127\.0\.0\.1:\d+|sqlite|token|--run-as-node/i);
   assert.match(text, /leximeet-mcp/);
-  assert.match(fs.readFileSync(launch.command, "utf8"), /export ELECTRON_RUN_AS_NODE=1/);
+  if (process.platform === "win32") {
+    const header = fs.readFileSync(launch.command).subarray(0, 2);
+    assert.equal(header[0], 0x4d);
+    assert.equal(header[1], 0x5a);
+    const sidecar = fs.readFileSync(`${launch.command}.launch`, "utf8");
+    assert.match(sidecar, /electron=/);
+    assert.match(sidecar, /script=/);
+    assert.doesNotMatch(sidecar, /--run-as-node/);
+  } else {
+    assert.match(fs.readFileSync(launch.command, "utf8"), /export ELECTRON_RUN_AS_NODE=1/);
+  }
 });
 
 test("目录快照拒绝复习提交工具", () => {
