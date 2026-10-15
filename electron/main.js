@@ -512,11 +512,17 @@ egg.register("electron-app-ready", () => {
     app.dock.setIcon(path.join(projectDir, "resources/brand/icon.png"));
   // 框架在此事件之前已获得单实例锁，第二实例不会启动第二个数据库写入者。
   startCore();
-  connector.start().catch(() => {
-    // 状态页显示失败，不能误报已连接。
+  connector.start().catch((error) => {
+    // 状态页显示失败，不能误报已连接；stderr 留给安装冒烟看原因。
+    process.stderr.write(
+      `${error.message}${error.cause?.message ? `: ${error.cause.message}` : ""}\n`,
+    );
   });
-  mcpGateway.start().catch(() => {
+  mcpGateway.start().catch((error) => {
     // AI 助手连接页显示失败，不自动拉起客户端。
+    process.stderr.write(
+      `${error.message}${error.cause?.message ? `: ${error.cause.message}` : ""}\n`,
+    );
   });
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([

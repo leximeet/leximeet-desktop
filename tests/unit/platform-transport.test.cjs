@@ -141,7 +141,9 @@ test(
     assert.match(listened.path, /^\\\\[.]\\pipe\\leximeet-mcp-/);
     const sddl = inspectNamedPipe(listened.path);
     const checked = assertNamedPipeExclusive(sddl);
-    assert.match(checked.sddl, /S-1-5-/);
+    // 回读可能是 S-1-5-21-… / S-1-5-18，也可能是 RID 500 的 LA 与 SY。
+    assert.match(checked.sddl, /S-1-5-|;;;(?:LA|SY|BA)\)/);
+    assert.equal(checked.hasSystem, true);
     assert.doesNotMatch(checked.sddl, /S-1-1-0|S-1-5-7|S-1-5-11|S-1-5-32-545/);
   },
 );

@@ -243,6 +243,18 @@ async function main() {
       console.error(`profile ${profileDir}\n${listTree(profileDir).join("\n")}`);
       if (fs.existsSync(stderrFile))
         console.error(`stderr:\n${fs.readFileSync(stderrFile, "utf8").slice(-4000)}`);
+      const logsDir = path.join(profileDir, "logs");
+      if (fs.existsSync(logsDir)) {
+        for (const name of fs.readdirSync(logsDir)) {
+          const file = path.join(logsDir, name);
+          try {
+            if (fs.statSync(file).isFile())
+              console.error(`${name}:\n${fs.readFileSync(file, "utf8").slice(-4000)}`);
+          } catch {
+            /* 仍被占用 */
+          }
+        }
+      }
     } catch {
       /* 诊断失败不覆盖原错误 */
     }
