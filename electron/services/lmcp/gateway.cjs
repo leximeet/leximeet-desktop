@@ -269,11 +269,24 @@ class LmcpGateway {
       throw error;
     }
   }
-  accept(socket) {
-    // Windows 命名管道上客户端 destroy 后，服务端 close 可能晚到，已销毁套接字仍占槽。
+  reapDeadSockets() {
+    // Windows 命名管道上客户端 destroy 后，服务端 close 可能晚到；半开套接字仍占槽。
     for (const client of [...this.sockets]) {
-      if (client.socket.destroyed) this.sockets.delete(client);
+      const dead =
+        client.socket.destroyed ||
+        client.socket.readyState === "closed" ||
+        (!client.socket.readable && !client.socket.writable);
+      if (!dead) continue;
+      this.sockets.delete(client);
+      try {
+        if (!client.socket.destroyed) client.socket.destroy();
+      } catch {
+        /* 已经关掉 */
+      }
     }
+  }
+  accept(socket) {
+    this.reapDeadSockets();
     if (this.closing || this.sockets.size >= this.maxConnections) {
       socket.destroy();
       return;
@@ -926,6 +939,7 @@ class LmcpGateway {
     }
   }
   status() {
+    this.reapDeadSockets();
     for (const client of this.connections.values()) this.expireRuntimeGrant(client);
     return {
       running: !!this.server && !this.closing,
@@ -934,6 +948,7 @@ class LmcpGateway {
       lastError: this.lastError,
       activeRequests: this.active,
       cleanupPendingCount: Math.max(0, this.lifecyclePorts.size - this.connections.size),
+      socketCount: this.sockets.size,
       browserOperations: this.operations.list(),
       connections: [...this.connections.values()].map((client) => ({
         connectionId: client.connectionId,

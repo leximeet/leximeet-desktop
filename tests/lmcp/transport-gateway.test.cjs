@@ -46,8 +46,12 @@ async function fixture(t, options) {
       while (waiting.length) waiting.shift()({ kind: "closed" });
     });
     await new Promise((resolve, reject) => {
-      socket.once("connect", resolve);
-      socket.once("close", () => reject(new Error("socket-closed-before-connect")));
+      const onClose = () => reject(new Error("socket-closed-before-connect"));
+      socket.once("close", onClose);
+      socket.once("connect", () => {
+        socket.off("close", onClose);
+        resolve();
+      });
     });
     const next = () =>
       inbox.length
@@ -255,7 +259,9 @@ test(
       const closed = new Promise((resolve) => client.socket.once("close", resolve));
       client.socket.destroy();
       await closed;
-      await delay(20);
+      const deadline = Date.now() + 500;
+      while (f.gateway.status().socketCount > 0 && Date.now() < deadline) await delay(20);
+      f.gateway.reapDeadSockets();
       if (i === 0) {
         const reused = await f.client(client.connectionId);
         const rejected = new Promise((resolve) => reused.socket.once("close", resolve));
