@@ -14,18 +14,19 @@ function homeOf(homeDir = os.homedir()) {
 function appDataRoot({ homeDir = os.homedir(), platform = process.platform, appData, env } = {}) {
   const home = homeOf(homeDir);
   const environment = env || process.env;
+  // 注入的隔离 home 默认写到该 home 下，避免测试误用本机 APPDATA / XDG_CONFIG_HOME。
+  // 显式 appData，或调用方传入的 env 覆盖，仍优先。
+  const isolated = path.resolve(home) !== path.resolve(os.homedir());
   if (platform === "darwin") return path.join(home, "Library", "Application Support", "LexiMeet");
   if (platform === "win32") {
-    // 注入的隔离 home 默认写到该 home 下，避免测试误用本机 APPDATA。
-    // 显式 appData，或调用方传入的 env.APPDATA，仍优先。
-    const isolated = path.resolve(home) !== path.resolve(os.homedir());
     const roaming =
       appData ||
       (isolated ? env?.APPDATA : environment.APPDATA) ||
       path.join(home, "AppData", "Roaming");
     return path.join(roaming, "LexiMeet");
   }
-  const config = environment.XDG_CONFIG_HOME || path.join(home, ".config");
+  const config =
+    (isolated ? env?.XDG_CONFIG_HOME : environment.XDG_CONFIG_HOME) || path.join(home, ".config");
   return path.join(config, "LexiMeet");
 }
 

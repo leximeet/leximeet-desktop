@@ -265,8 +265,21 @@ function leximeetTomlText(source) {
   return ranges.map(([from, to]) => lines.slice(from, to).join("\n")).join("\n");
 }
 
+function unescapeTomlBasic(text) {
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === "\\" && i + 1 < text.length) {
+      out += text[++i];
+      continue;
+    }
+    out += text[i];
+  }
+  return out;
+}
+
 function extractTomlCommand(body) {
-  return /(?:^|\n)\s*command\s*=\s*"([^"]+)"/.exec(body)?.[1] || "";
+  const match = /(?:^|\n)\s*command\s*=\s*"((?:\\.|[^"\\])*)"/.exec(body);
+  return match ? unescapeTomlBasic(match[1]) : "";
 }
 
 function codexTableMatches(body, launch) {
@@ -473,4 +486,5 @@ module.exports = {
   findTomlTables,
   parseTomlHeader,
   leximeetTomlText,
+  extractTomlCommand,
 };

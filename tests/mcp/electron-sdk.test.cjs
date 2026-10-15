@@ -93,17 +93,21 @@ test(
       args: written.mcpServers.leximeet.args,
       stderr: "pipe",
       env: {
+        ...process.env,
         HOME: home,
-        PATH: process.env.PATH,
+        USERPROFILE: home,
+        APPDATA: path.join(home, "AppData", "Roaming"),
+        LOCALAPPDATA: path.join(home, "AppData", "Local"),
         LEXIMEET_MCP_DESCRIPTOR: gateway.descriptorPath,
         LEXIMEET_MCP_CLIENT: "cursor",
       },
     });
     const client = new Client({ name: "leximeet-e2e", version: "1.0.1" });
-    await client.connect(transport);
     t.after(async () => {
       await client.close().catch(() => {});
+      await transport.close?.().catch(() => {});
     });
+    await client.connect(transport);
     const listed = await client.listTools();
     assert.equal(listed.tools.length, 4);
     assert.equal(listed.tools[0].name, "leximeet_help");

@@ -17,6 +17,7 @@ const {
   launcherPath,
   cursorDeeplink,
   leximeetTomlText,
+  extractTomlCommand,
   parseTomlHeader,
   paths,
 } = require("../../electron/services/mcp/client-config.cjs");
@@ -117,7 +118,7 @@ test("Codex TOML 只在 leximeet 表内判断状态与幂等", (t) => {
   assert.match(text, /default_tools_approval_mode = "writes"/);
   assert.doesNotMatch(text, /token|secret|--run-as-node/i);
   const body = leximeetTomlText(text);
-  assert.match(body, new RegExp(f.launch.command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.equal(extractTomlCommand(body), f.launch.command);
   const inspected = inspectClient("codex", {
     homeDir: f.root,
     electronExecutable: f.electron,
@@ -131,6 +132,14 @@ test("Codex TOML 只在 leximeet 表内判断状态与幂等", (t) => {
   const after = fs.readFileSync(file, "utf8");
   assert.match(after, /keep-me|\/missing\/other/);
   assert.doesNotMatch(after, /mcp_servers\.leximeet/);
+});
+
+test("Codex TOML command 反转义 Windows 路径后再判断存在与幂等", () => {
+  const command = "C:\\Users\\me\\AppData\\Roaming\\LexiMeet\\mcp\\leximeet-mcp.exe";
+  const body = ["[mcp_servers.leximeet]", `command = "${command.replace(/\\/g, "\\\\")}"`, ""].join(
+    "\n",
+  );
+  assert.equal(extractTomlCommand(body), command);
 });
 
 test("Codex TOML 表头识别注释、空白、引号键名与数组表", () => {
@@ -342,7 +351,7 @@ test("Codex CLI 接入后补写 writes 批准且只配启动脚本", (t) => {
   if (process.platform !== "win32") assert.equal(result.method, "cli");
   const text = fs.readFileSync(config, "utf8");
   assert.match(text, /default_tools_approval_mode = "writes"/);
-  assert.match(text, new RegExp(f.launch.command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.equal(extractTomlCommand(leximeetTomlText(text)), f.launch.command);
   assert.doesNotMatch(text, /--run-as-node/);
   assert.match(result.copyCommand, /codex mcp add leximeet -- /);
   assert.doesNotMatch(result.copyCommand, /--run-as-node/);
