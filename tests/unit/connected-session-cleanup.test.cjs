@@ -9,6 +9,7 @@ const { reclaimConnectedSession } = require("../../scripts/lib/connected-session
 const { parseArguments } = require("../../scripts/lib/connected-readiness.cjs");
 const launcher = require("../../scripts/accept-connected.cjs");
 const { ensurePrivateDirectory } = require("../../electron/services/platform/private-files.cjs");
+const { windowsSystem32Binary } = require("../../electron/services/platform/identity.cjs");
 
 function fixture(t) {
   const root = ensurePrivateDirectory(connectedSessionRoot());
@@ -107,14 +108,15 @@ test("目录或回收目标的软链接拒绝处理，外部文件保持不变",
 test("Windows 回收拒绝 Everyone/Users/Authenticated Users 仍可访问的隔离目录", (t) => {
   if (process.platform !== "win32") return t.skip("需要真实 NTFS 与 icacls");
   const { execFileSync } = require("node:child_process");
+  const icacls = windowsSystem32Binary("icacls.exe");
   const f = fixture(t);
   const trustees = ["Everyone", "*S-1-5-32-545", "*S-1-5-11"];
   for (const trustee of trustees) {
-    execFileSync("icacls", [f.directory, "/grant", `${trustee}:(R)`, "/Q"], {
+    execFileSync(icacls, [f.directory, "/grant", `${trustee}:(R)`, "/Q"], {
       windowsHide: true,
     });
     assert.throws(() => reclaimConnectedSession(f.id), /隔离目录权限不安全/);
-    execFileSync("icacls", [f.directory, "/remove:g", trustee, "/Q"], {
+    execFileSync(icacls, [f.directory, "/remove:g", trustee, "/Q"], {
       windowsHide: true,
     });
   }

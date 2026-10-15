@@ -4,12 +4,18 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { execFileSync } = require("node:child_process");
 const {
   ensurePrivateDirectory,
   writePrivateJson,
   readPrivateJson,
   assertPrivate,
 } = require("../../electron/services/platform/private-files.cjs");
+const { windowsSystem32Binary } = require("../../electron/services/platform/identity.cjs");
+
+function runIcacls(args, options) {
+  return execFileSync(windowsSystem32Binary("icacls.exe"), args, options);
+}
 
 function workspace(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "leximeet-private-"));
@@ -51,7 +57,7 @@ test("Windows NTFS 用 icacls 去掉 Everyone/Users", (t) => {
   const file = path.join(directory, "token.json");
   writePrivateJson(file, { format: "leximeet.test/1", ok: true }, { platform: "win32" });
   assert.equal(readPrivateJson(file, { platform: "win32" }).ok, true);
-  const listing = require("node:child_process").execFileSync("icacls", [file], {
+  const listing = runIcacls([file], {
     encoding: "utf8",
   });
   assert.doesNotMatch(listing, /Everyone/i);
@@ -60,18 +66,17 @@ test("Windows NTFS 用 icacls 去掉 Everyone/Users", (t) => {
 
 test("Windows ACL 断言拒绝 Everyone、Users 与 Authenticated Users", (t) => {
   if (process.platform !== "win32") return t.skip("需要真实 NTFS 与 icacls");
-  const { execFileSync } = require("node:child_process");
   const { assertWindowsPrivate } = require("../../electron/services/platform/win32-acl.cjs");
   const root = workspace(t);
   const directory = path.join(root, "secret");
   ensurePrivateDirectory(directory, { platform: "win32" });
   assert.doesNotThrow(() => assertPrivate(directory, { directory: true, platform: "win32" }));
   for (const trustee of ["Everyone", "*S-1-5-32-545", "*S-1-5-11"]) {
-    execFileSync("icacls", [directory, "/grant", `${trustee}:(R)`, "/Q"], {
+    runIcacls([directory, "/grant", `${trustee}:(R)`, "/Q"], {
       windowsHide: true,
     });
     assert.throws(() => assertWindowsPrivate(directory), /UNSAFE_PRIVATE_PATH/);
-    execFileSync("icacls", [directory, "/remove:g", trustee, "/Q"], {
+    runIcacls([directory, "/remove:g", trustee, "/Q"], {
       windowsHide: true,
     });
   }

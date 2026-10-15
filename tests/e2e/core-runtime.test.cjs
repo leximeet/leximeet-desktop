@@ -12,6 +12,7 @@ const {
   pidAlive,
   signalOwnedByMarker,
 } = require("../../electron/services/platform/process-tree.cjs");
+const { windowsSystem32Binary } = require("../../electron/services/platform/identity.cjs");
 
 const projectDir = path.resolve(__dirname, "../..");
 const builtJar = path.join(projectDir, "core-java/target/leximeet-core.jar");
@@ -73,7 +74,7 @@ function fixture(t, { jarPath = builtJar, Runtime = JavaRuntime, ...options } = 
 test.after(() => {
   if (process.platform !== "win32") return;
   try {
-    execFileSync("taskkill", ["/F", "/IM", "java.exe", "/T"], {
+    execFileSync(windowsSystem32Binary("taskkill.exe"), ["/F", "/IM", "java.exe", "/T"], {
       windowsHide: true,
       timeout: 15000,
     });
