@@ -116,13 +116,13 @@ test(
       }),
     );
     let stderr = "";
-    const connect = client.connect(transport);
+    const connected = client.connect(transport);
     transport.stderr?.on("data", (chunk) => {
       stderr += chunk;
       process.stderr.write(chunk);
     });
     try {
-      await connect;
+      await connected;
     } catch (error) {
       assert.fail(`MCP SDK 连接失败：${error.message}${stderr ? `\n${stderr}` : ""}`);
     }
