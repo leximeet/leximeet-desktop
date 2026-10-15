@@ -17,7 +17,11 @@ test("Linux 开机自启尽力写 XDG desktop 项，关闭则删除", (t) => {
   const enabled = setLinuxAutostart(true, { homeDir: home, executable });
   assert.equal(enabled.enabled, true);
   assert.match(fs.readFileSync(enabled.file, "utf8"), /X-GNOME-Autostart-enabled=true/);
-  assert.match(renderDesktopEntry(executable), /Exec=/);
+  assert.match(renderDesktopEntry(executable), /Exec="[^"]*leximeet"/);
+  assert.match(
+    renderDesktopEntry(path.join(home, "LexiMeet App", "leximeet")),
+    /Exec="[^"]*LexiMeet App[^"]*"/,
+  );
   assert.equal(linuxAutostartEnabled({ homeDir: home }), true);
   setLinuxAutostart(false, { homeDir: home, executable });
   assert.equal(linuxAutostartEnabled({ homeDir: home }), false);

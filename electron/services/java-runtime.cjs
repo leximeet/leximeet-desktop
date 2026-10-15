@@ -406,8 +406,9 @@ class JavaRuntime {
       }
     };
     detachStdio();
-    // Node 的 exitCode 在 Windows 上可能已置位，但真正持锁的 java.exe 可能是另一个 PID。
-    if (Number.isInteger(pid) && pidAlive(pid)) {
+    // Windows 上 Node 跟踪的 PID 可能对不上真正持锁的 java.exe，立刻 taskkill /T /F。
+    // POSIX 留给后面的 2.5 秒 SIGTERM 宽限期，避免这里先 SIGKILL 让宽限失效。
+    if (process.platform === "win32" && Number.isInteger(pid) && pidAlive(pid)) {
       try {
         signalTree(pid, "SIGKILL");
       } catch {

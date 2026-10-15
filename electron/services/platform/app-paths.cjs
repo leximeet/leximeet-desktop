@@ -11,6 +11,16 @@ function homeOf(homeDir = os.homedir()) {
   return homeDir;
 }
 
+/** 隔离 home 只用调用方传入的 XDG；真实 home 才回落 process.env。 */
+function linuxConfigHome({ homeDir = os.homedir(), env } = {}) {
+  const home = homeOf(homeDir);
+  const isolated = path.resolve(home) !== path.resolve(os.homedir());
+  const environment = env || process.env;
+  return (
+    (isolated ? env?.XDG_CONFIG_HOME : environment.XDG_CONFIG_HOME) || path.join(home, ".config")
+  );
+}
+
 function appDataRoot({ homeDir = os.homedir(), platform = process.platform, appData, env } = {}) {
   const home = homeOf(homeDir);
   const environment = env || process.env;
@@ -25,9 +35,7 @@ function appDataRoot({ homeDir = os.homedir(), platform = process.platform, appD
       path.join(home, "AppData", "Roaming");
     return path.join(roaming, "LexiMeet");
   }
-  const config =
-    (isolated ? env?.XDG_CONFIG_HOME : environment.XDG_CONFIG_HOME) || path.join(home, ".config");
-  return path.join(config, "LexiMeet");
+  return path.join(linuxConfigHome({ homeDir: home, env }), "LexiMeet");
 }
 
 function mcpDir(options) {
@@ -74,7 +82,7 @@ function browserUserDataDir(browser, options = {}) {
     );
   }
   return path.join(
-    options.env?.XDG_CONFIG_HOME || path.join(home, ".config"),
+    linuxConfigHome({ homeDir: home, env: options.env }),
     browser === "chrome" ? "google-chrome" : "microsoft-edge",
   );
 }
@@ -88,9 +96,7 @@ function nativeMessagingHostsDir(browser, options = {}) {
 }
 
 function xdgAutostartDir(options = {}) {
-  const home = homeOf(options.homeDir);
-  const config = options.env?.XDG_CONFIG_HOME || path.join(home, ".config");
-  return path.join(config, "autostart");
+  return path.join(linuxConfigHome(options), "autostart");
 }
 
 module.exports = {

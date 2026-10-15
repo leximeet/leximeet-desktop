@@ -9,6 +9,16 @@ function autostartFile(options = {}) {
   return path.join(xdgAutostartDir(options), DESKTOP_NAME);
 }
 
+/** Desktop Entry 的 Exec：保留字符加双引号，% 写成 %%，避免空格路径被拆。 */
+function quoteDesktopExec(executable) {
+  const escaped = String(executable)
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\$/g, "\\$")
+    .replace(/%/g, "%%");
+  return `"${escaped}"`;
+}
+
 function renderDesktopEntry(executable) {
   return [
     "[Desktop Entry]",
@@ -16,7 +26,7 @@ function renderDesktopEntry(executable) {
     "Version=1.0",
     "Name=LexiMeet",
     "Comment=词遇桌面",
-    `Exec=${executable}`,
+    `Exec=${quoteDesktopExec(executable)}`,
     "Terminal=false",
     "Categories=Education;",
     "X-GNOME-Autostart-enabled=true",
@@ -44,6 +54,7 @@ function linuxAutostartEnabled(options = {}) {
 module.exports = {
   DESKTOP_NAME,
   autostartFile,
+  quoteDesktopExec,
   renderDesktopEntry,
   setLinuxAutostart,
   linuxAutostartEnabled,

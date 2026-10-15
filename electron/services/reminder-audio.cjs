@@ -22,25 +22,49 @@ function firstOnPath(names) {
   return "";
 }
 
+function isWaveAudio(audio) {
+  return /wav|wave/i.test(String(audio?.mime || ""));
+}
+
+function reminderAudioFileName(mime) {
+  const type = String(mime || "").toLowerCase();
+  if (type.includes("wav") || type.includes("wave")) return "pronunciation.wav";
+  if (type.includes("ogg")) return "pronunciation.ogg";
+  return "pronunciation.mp3";
+}
+
+function windowsPlayerCommand(file, audio) {
+  const quoted = file.replace(/'/g, "''");
+  const { windowsPowerShellBinary } = require("./platform/identity.cjs");
+  const volume = Number(audio?.volume);
+  const level = Number.isFinite(volume) ? Math.min(1, Math.max(0, volume)) : 1;
+  // SoundPlayer 只播 PCM WAV；有道 / 微软默认是 MP3，改走 WPF MediaPlayer。
+  const command = isWaveAudio(audio)
+    ? `(New-Object Media.SoundPlayer '${quoted}').PlaySync()`
+    : [
+        "Add-Type -AssemblyName presentationCore",
+        "$p = New-Object System.Windows.Media.MediaPlayer",
+        `$p.Open([uri]([System.IO.Path]::GetFullPath('${quoted}')))`,
+        `$p.Volume = ${level}`,
+        "$p.Play()",
+        "$until = [DateTime]::UtcNow.AddSeconds(28)",
+        "do { Start-Sleep -Milliseconds 80 } while (-not $p.NaturalDuration.HasTimeSpan -and [DateTime]::UtcNow -lt $until)",
+        "if ($p.NaturalDuration.HasTimeSpan) { $remain = $p.NaturalDuration.TimeSpan.TotalMilliseconds - $p.Position.TotalMilliseconds; if ($remain -gt 0) { Start-Sleep -Milliseconds ([Math]::Min([int]$remain, 28000)) } }",
+        "$p.Close()",
+      ].join("; ");
+  return {
+    command: windowsPowerShellBinary(),
+    args: ["-NoProfile", "-NonInteractive", "-Command", command],
+  };
+}
+
 function playerCommand(file, audio, platform = process.platform) {
   if (platform === "darwin")
     return {
       command: "/usr/bin/afplay",
       args: ["-v", String(audio.volume ?? 1), "-r", String(audio.rate ?? 1), file],
     };
-  if (platform === "win32") {
-    const quoted = file.replace(/'/g, "''");
-    const { windowsPowerShellBinary } = require("./platform/identity.cjs");
-    return {
-      command: windowsPowerShellBinary(),
-      args: [
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        `(New-Object Media.SoundPlayer '${quoted}').PlaySync()`,
-      ],
-    };
-  }
+  if (platform === "win32") return windowsPlayerCommand(file, audio);
   const paplay = firstOnPath(["paplay", "pw-play", "aplay"]);
   if (!paplay) throw new Error("REMINDER_AUDIO_PLAYER_MISSING");
   return { command: paplay, args: [file] };
@@ -56,7 +80,7 @@ async function playReminderAudio(
   if (silent) return;
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "leximeet-reminder-audio-"));
   try {
-    const file = path.join(directory, "pronunciation.audio");
+    const file = path.join(directory, reminderAudioFileName(audio.mime));
     await fs.writeFile(file, Buffer.from(audio.data, "base64"), { mode: 0o600 });
     const player = playerCommand(file, audio, platform);
     await promisify(execFile)(player.command, player.args, { timeout: 30000, windowsHide: true });
@@ -64,4 +88,4 @@ async function playReminderAudio(
     await fs.rm(directory, { recursive: true, force: true });
   }
 }
-module.exports = { playReminderAudio, playerCommand };
+module.exports = { playReminderAudio, playerCommand, reminderAudioFileName };

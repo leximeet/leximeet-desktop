@@ -1,6 +1,7 @@
 "use strict";
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const os = require("node:os");
 const path = require("node:path");
 const {
   appDataRoot,
@@ -91,4 +92,39 @@ test("Chrome / Edge 用户资料根覆盖三端官方默认位置", () => {
     xdgAutostartDir({ homeDir: HOME, env: {} }),
     path.join(HOME, ".config", "autostart"),
   );
+});
+
+test("真实 home 未传入 env 时沿用 process.env.XDG_CONFIG_HOME", () => {
+  const previous = process.env.XDG_CONFIG_HOME;
+  const xdg = path.resolve("/tmp/leximeet-real-xdg");
+  process.env.XDG_CONFIG_HOME = xdg;
+  try {
+    assert.equal(
+      browserUserDataDir("chrome", { homeDir: os.homedir(), platform: "linux" }),
+      path.join(xdg, "google-chrome"),
+    );
+    assert.equal(xdgAutostartDir({ homeDir: os.homedir() }), path.join(xdg, "autostart"));
+    assert.equal(
+      appDataRoot({ homeDir: os.homedir(), platform: "linux" }),
+      path.join(xdg, "LexiMeet"),
+    );
+  } finally {
+    if (previous === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = previous;
+  }
+});
+
+test("隔离 home 未传入 env 时不用本机 XDG_CONFIG_HOME", () => {
+  const previous = process.env.XDG_CONFIG_HOME;
+  process.env.XDG_CONFIG_HOME = path.resolve("/tmp/leximeet-host-xdg");
+  try {
+    assert.equal(
+      browserUserDataDir("chrome", { homeDir: HOME, platform: "linux" }),
+      path.join(HOME, ".config", "google-chrome"),
+    );
+    assert.equal(xdgAutostartDir({ homeDir: HOME }), path.join(HOME, ".config", "autostart"));
+  } finally {
+    if (previous === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = previous;
+  }
 });
