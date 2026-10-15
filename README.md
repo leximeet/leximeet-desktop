@@ -15,7 +15,7 @@
 
 [跟随截图完成一次使用](docs/操作演示.md)：设置目标、手动采集、保存笔记、多词本整理与六种练习。
 
-**正式版本 1.0.0。** [下载与发行说明](https://github.com/leximeet/leximeet-desktop/releases/tag/1.0.0) · [本版功能与平台](docs/版本/1.0.0.md)。 使用时无需账号；云登录与独立设备同步计划在 2.0.0 实现。目前实际验证的平台是 macOS arm64，其他平台的构建配置不能代表验收完成。
+**已发布附件以对应 Release 为准**（[1.0.0](https://github.com/leximeet/leximeet-desktop/releases/tag/1.0.0) · [1.0.1](https://github.com/leximeet/leximeet-desktop/releases/tag/1.0.1)）。源码版本 1.0.2 增加 Windows x64 与 Linux x64，[发行说明](docs/版本/1.0.2.md)写明安装包、签名与 SmartScreen 边界；三端齐套验收后才打 1.0.2 标签。使用时无需账号；云登录与独立设备同步计划在 2.0.0 实现。
 
 ![明亮主题：词库与语境](docs/screenshots/library-light.png)
 

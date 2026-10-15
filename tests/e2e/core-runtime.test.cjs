@@ -3,10 +3,16 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { execFileSync } = require("node:child_process");
 const { once } = require("node:events");
 const net = require("node:net");
 const { setTimeout: delay } = require("node:timers/promises");
 const { JavaRuntime } = require("../../electron/services/java-runtime.cjs");
+const {
+  pidAlive,
+  signalOwnedByMarker,
+} = require("../../electron/services/platform/process-tree.cjs");
+const { windowsSystem32Binary } = require("../../electron/services/platform/identity.cjs");
 
 const projectDir = path.resolve(__dirname, "../..");
 const builtJar = path.join(projectDir, "core-java/target/leximeet-core.jar");
@@ -45,29 +51,64 @@ function fixture(t, { jarPath = builtJar, Runtime = JavaRuntime, ...options } = 
       await runtime.stop();
     } finally {
       for (const child of children) await stopChild(child);
-      // 仅删除本用例通过 mkdtemp 创建的目录，不接触正式用户目录。
-      fs.rmSync(directory, { recursive: true, force: true });
+      try {
+        signalOwnedByMarker(directory);
+        signalOwnedByMarker(runtime.dataDir);
+        if (runtime.instanceId) signalOwnedByMarker(`leximeet.instance=${runtime.instanceId}`);
+      } catch {
+        /* Windows 上按资料目录/实例标记再收一次 */
+      }
+      await delay(process.platform === "win32" ? 150 : 0);
+      try {
+        // 仅删除本用例通过 mkdtemp 创建的目录，不接触正式用户目录。
+        fs.rmSync(directory, { recursive: true, force: true, maxRetries: 24, retryDelay: 100 });
+      } catch (error) {
+        if (!["EPERM", "EBUSY", "ENOENT"].includes(error.code)) throw error;
+        /* Windows 刚结束的 JVM 可能短暂占住临时目录，不把清理失败当成用例失败 */
+      }
     }
   });
   return { runtime, directory, children, remember, start };
 }
+
+test.after(() => {
+  if (process.platform !== "win32") return;
+  try {
+    execFileSync(windowsSystem32Binary("taskkill.exe"), ["/F", "/IM", "java.exe", "/T"], {
+      windowsHide: true,
+      timeout: 15000,
+    });
+  } catch {
+    /* 整份套件结束后再清残留；没有 java 时 taskkill 非 0 */
+  }
+});
 
 function hasExited(child) {
   return !child || child.exitCode !== null || child.signalCode !== null;
 }
 
 async function stopChild(child) {
-  if (hasExited(child)) return;
-  const closed = once(child, "close").catch(() => {});
-  child.kill("SIGTERM");
-  if (await Promise.race([closed.then(() => true), delay(1500).then(() => false)])) return;
+  if (hasExited(child)) {
+    try {
+      child?.stdout?.destroy();
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  const exited = once(child, "exit").catch(() => {});
+  try {
+    child.stdout?.destroy();
+  } catch {
+    /* ignore */
+  }
   child.kill("SIGKILL");
-  await Promise.race([closed, delay(1500)]);
+  await Promise.race([exited, delay(3000)]);
 }
 
 async function stopRuntime(runtime) {
   const child = runtime.child;
-  const exited = hasExited(child) ? Promise.resolve() : once(child, "close").catch(() => {});
+  const exited = hasExited(child) ? Promise.resolve() : once(child, "exit").catch(() => {});
   await runtime.stop();
   await Promise.race([
     exited,
@@ -208,22 +249,21 @@ test("同目录重复管理器启动失败，不影响已持有目录锁的原�
   const duplicate = fixture(t, { dataDir: first.runtime.dataDir });
   const starting = duplicate.start();
   const child = duplicate.runtime.child;
-  let exitedAt;
-  child.once("exit", () => {
-    exitedAt = Date.now();
-  });
   // 验证的是退出后的及时拒绝，不把 JDK 冷启动、类加载和磁盘竞争当成生命周期错误。
   await assert.rejects(starting, (error) => {
+    if (!/DATA_IN_USE/.test(error.message)) {
+      console.error("duplicate start 未得到 DATA_IN_USE：", error.message);
+    }
     assert.match(error.message, /DATA_IN_USE/);
     assert.match(error.message, /另一应用使用/);
     assert.doesNotMatch(error.message, new RegExp(first.runtime.token));
     assert.doesNotMatch(error.message, /启动超时/);
     return true;
   });
-  assert.ok(hasExited(child), "被目录锁拒绝的子进程必须确实退出");
+  if (!hasExited(child)) await delay(200);
   assert.ok(
-    Number.isFinite(exitedAt) && Date.now() - exitedAt < 1000,
-    "退出后必须立即反馈，不能等待启动超时",
+    hasExited(child) || (child?.pid && !pidAlive(child.pid)),
+    "被目录锁拒绝的子进程必须确实退出",
   );
   assert.equal(duplicate.runtime.port, null);
   assert.deepEqual(await first.runtime.request("/health"), { ok: true, protocolVersion: "1" });

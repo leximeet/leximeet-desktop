@@ -2,7 +2,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
 const net = require("node:net");
 const { spawn } = require("node:child_process");
@@ -20,12 +19,16 @@ const {
 const { readPrivateJson } = require("../../electron/services/lmcp/private-files.cjs");
 const { buildNativeHost } = require("../../scripts/lmcp/build-host.cjs");
 const { startFocusMonitor } = require("../helpers/macos-focus-monitor.cjs");
+const { electronBinary } = require("../helpers/electron-binary.cjs");
+const { isolatedProfile } = require("../helpers/isolated-profile.cjs");
+const {
+  uniqueTestHostName,
+  cleanupNativeRegistration,
+  forgetSharedTestHost,
+} = require("../helpers/native-host-fixture.cjs");
 
 const project = path.resolve(__dirname, "../..");
-const electron = path.join(
-  project,
-  "node_modules/electron/dist/Electron.app/Contents/MacOS/Electron",
-);
+const electron = electronBinary();
 const script = path.join(project, "electron/native-host/main.cjs");
 const origin = `chrome-extension://${"a".repeat(32)}/`;
 const otherOrigin = `chrome-extension://${"b".repeat(32)}/`;
@@ -112,9 +115,8 @@ class CoreDouble {
 }
 
 async function fixture(t, options = {}) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "lmcp-native-test-"));
-  const profile = { name: "test", root: path.join(root, "desktop") };
-  fs.mkdirSync(profile.root, { mode: 0o700 });
+  const { root, profileRoot } = isolatedProfile(t, { prefix: "lmcp-native-test-" });
+  const profile = { name: "test", root: profileRoot };
   const { externalBundle = false, ...gatewayOptions } = options;
   const core = new CoreDouble();
   const gateway = new LmcpGateway({
@@ -130,21 +132,26 @@ async function fixture(t, options = {}) {
     try {
       await Promise.all(children.map(stopChild));
       await gateway.close();
-      assert.equal(fs.existsSync(gateway.socketPath), false, "只回收本次UDS");
-      assert.equal(
-        fs.existsSync(gateway.socketDirectory),
-        false,
-        "回收本次隔离资料根的空Socket目录",
-      );
-      if (registration && fs.existsSync(registration.recordPath))
-        unregisterNativeHost(registration);
+      if (process.platform !== "win32") {
+        assert.equal(fs.existsSync(gateway.socketPath), false, "只回收本次UDS");
+        assert.equal(
+          fs.existsSync(gateway.socketDirectory),
+          false,
+          "回收本次隔离资料根的空Socket目录",
+        );
+      }
     } finally {
+      cleanupNativeRegistration(registration);
       fs.rmSync(root, { recursive: true, force: true });
       if (focus) {
         const report = await focus.stop();
         t.diagnostic(`LMCP_NATIVE_FOCUS ${JSON.stringify(report)}`);
-        assert.equal(report.complete, true, report.error || "焦点监测必须覆盖启动前至退出后");
-        assert.deepEqual(report.violations, [], "Native Host 和监测进程不能成为前台应用");
+        if (process.platform === "darwin") {
+          assert.equal(report.complete, true, report.error || "焦点监测必须覆盖启动前至退出后");
+          assert.deepEqual(report.violations, [], "Native Host 和监测进程不能成为前台应用");
+        } else {
+          assert.equal(report.supported, false);
+        }
       }
     }
   });
@@ -156,6 +163,7 @@ async function fixture(t, options = {}) {
         outputDir: path.join(root, "packaged-resources", "native-host"),
       }).hostScript
     : script;
+  forgetSharedTestHost();
   registration = registerNativeHost({
     extensionId: "a".repeat(32),
     browserDataDir: path.join(root, "browser"),
@@ -164,7 +172,7 @@ async function fixture(t, options = {}) {
     hostScript,
     profileName: "test",
     isolated: true,
-    hostName: "org.leximeet.browser.test",
+    hostName: uniqueTestHostName(),
   });
   function browser(caller = origin) {
     // PATH 没有 Node；NODE_OPTIONS 注入会被安装器生成的 launcher 清除。
@@ -327,9 +335,11 @@ test("随包 Electron Native Host 在没有系统 Node 的独立进程双向传�
   assert.deepEqual((await pending).result, { page: null });
   assert.equal(browser.stderr, "");
   assert.equal(f.gateway.status().connections.length, 1);
-  assert.equal(fs.statSync(f.gateway.descriptorPath).mode & 0o777, 0o600);
+  if (process.platform !== "win32")
+    assert.equal(fs.statSync(f.gateway.descriptorPath).mode & 0o777, 0o600);
   const descriptor = readPrivateJson(f.gateway.descriptorPath);
-  assert.equal(fs.statSync(descriptor.socketPath).mode & 0o777, 0o600);
+  if (descriptor.kind === "uds" || descriptor.socketPath)
+    assert.equal(fs.statSync(descriptor.path || descriptor.socketPath).mode & 0o777, 0o600);
   assert(!JSON.stringify(f.gateway.status()).includes(descriptor.token));
 });
 
@@ -339,7 +349,7 @@ test("外置 Host 发布物料可独立运行，不读取 app.asar 或系统 Nod
   assert.equal((await browser.call("getWorkspace", {}, browser.authorization)).ok, true);
   const bundleRoot = path.join(f.root, "packaged-resources", "native-host");
   const bundle = JSON.parse(fs.readFileSync(path.join(bundleRoot, "bundle.json")));
-  assert.equal(bundle.files.length, 3);
+  assert.equal(bundle.files.length, 8);
   assert.equal(bundle.runtime, "electron-run-as-node");
   assert.equal(browser.stderr, "");
 });
@@ -766,7 +776,7 @@ test("Core 大响应转换为有界错误帧；同 Port 换 connectionId 拒绝"
 test("未经握手的 UDS 和旧代次 token 都不能访问 Core", async (t) => {
   const f = await fixture(t);
   const descriptor = readPrivateJson(f.gateway.descriptorPath);
-  const socket = net.connect(descriptor.socketPath);
+  const socket = net.connect(descriptor.path || descriptor.socketPath);
   await new Promise((resolve) => socket.once("connect", resolve));
   socket.write(
     encodeFrame({ kind: "transport-auth", token: "x".repeat(64), extensionOrigin: origin }),
@@ -783,7 +793,15 @@ test("注册与撤销只管理自身清单，不覆盖或删除另一份 Host", 
   const saved = fs.readFileSync(f.registration.manifestPath);
   fs.writeFileSync(f.registration.manifestPath, "changed", { mode: 0o600 });
   assert.throws(() => unregisterNativeHost(f.registration), /NATIVE_REGISTRATION_CHANGED/);
-  assert.equal(fs.readFileSync(f.registration.launcher, "utf8").includes("NODE_OPTIONS"), true);
+  if (process.platform === "win32") {
+    // Windows 启动器是 PE stub，清除 NODE_OPTIONS 在 C 源里，不在可执行文件文本中。
+    const bytes = fs.readFileSync(f.registration.launcher);
+    assert.equal(bytes[0], 0x4d);
+    assert.equal(bytes[1], 0x5a);
+    assert.equal(fs.existsSync(`${f.registration.launcher}.launch`), true);
+  } else {
+    assert.equal(fs.readFileSync(f.registration.launcher, "utf8").includes("NODE_OPTIONS"), true);
+  }
   fs.writeFileSync(f.registration.manifestPath, saved, { mode: 0o600 });
   assert.throws(
     () =>

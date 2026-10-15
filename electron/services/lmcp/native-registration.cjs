@@ -8,10 +8,36 @@ const {
   writePrivateJson,
   assertPrivate,
 } = require("./private-files.cjs");
+const { writeNativeLauncher, findPeStub } = require("../platform/launcher.cjs");
+const {
+  registryKey,
+  writeRegistryValue,
+  readRegistryValue,
+  removeRegistryValue,
+} = require("../platform/native-host-reg.cjs");
 const ORIGIN = /^chrome-extension:\/\/[a-p]{32}\/$/;
 const HOST_NAME = /^[a-z0-9_]+(?:\.[a-z0-9_]+)+$/;
-const quote = (text) => `'${String(text).replaceAll("'", "'\\''")}'`;
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
+
+function launcherName(hostName, key, platform) {
+  return `${hostName}-${key}.${platform === "win32" ? "exe" : "sh"}`;
+}
+
+function expectedManifestPath(record) {
+  const key = digest(`${record.browserDataDir}\n${record.hostName}`).slice(0, 32);
+  if ((record.platform || "darwin") === "win32")
+    return path.join(record.profileRoot, "native-messaging", `${record.hostName}-${key}.json`);
+  return path.join(record.browserDataDir, "NativeMessagingHosts", `${record.hostName}.json`);
+}
+
+function expectedLauncherPath(record) {
+  const key = digest(`${record.browserDataDir}\n${record.hostName}`).slice(0, 32);
+  return path.join(
+    record.profileRoot,
+    "native-messaging",
+    launcherName(record.hostName, key, record.platform || "darwin"),
+  );
+}
 
 // 读取随包二进制的 fuse，而不试运行一个可能抢占前台的 Electron UI。
 function assertRunAsNodeEnabled(executable) {
@@ -75,8 +101,13 @@ function registerNativeHost({
   isolated = false,
   profileName = "local",
   allowDailyRegistration = false,
+  browser = "chrome",
+  stubPath,
+  resourcesPath,
+  projectDir,
 }) {
-  if (platform !== "darwin") throw new Error("NATIVE_REGISTRATION_MACOS_ONLY");
+  if (!["darwin", "linux", "win32"].includes(platform))
+    throw new Error("NATIVE_REGISTRATION_PLATFORM_UNSUPPORTED");
   if (
     !Array.isArray(extensionIds) ||
     !extensionIds.length ||
@@ -103,19 +134,20 @@ function registerNativeHost({
   ensurePrivateDirectory(records);
   const key = digest(`${browserDataDir}\n${hostName}`).slice(0, 32);
   const recordPath = path.join(records, `${key}.json`);
-  const launcher = path.join(directory, `${hostName}-${key}.sh`);
-  const manifestPath = path.join(browserDataDir, "NativeMessagingHosts", `${hostName}.json`);
+  const launcher = path.join(directory, launcherName(hostName, key, platform));
   const descriptorPath = path.join(directory, "lmcp-uds.json");
+  const manifestPath =
+    platform === "win32"
+      ? path.join(directory, `${hostName}-${key}.json`)
+      : path.join(browserDataDir, "NativeMessagingHosts", `${hostName}.json`);
   const firstInstall = !fs.existsSync(recordPath);
   if (fs.existsSync(manifestPath) || fs.existsSync(launcher)) {
     if (!fs.existsSync(recordPath)) throw new Error("NATIVE_REGISTRATION_NOT_OWNED");
     assertRegistrationOwnership(readPrivateJson(recordPath));
   }
-  ensurePrivateDirectory(path.dirname(manifestPath));
+  if (platform !== "win32") ensurePrivateDirectory(path.dirname(manifestPath));
   const origins = extensionIds.map((id) => `chrome-extension://${id}/`);
   const origin = origins[0];
-  // 只接受浏览器补充的来源参数；清除能注入 Node 代码或改变 ASAR 读取的环境变量。
-  const launcherText = `#!/bin/sh\n# 词遇管理的 Native Host：随包运行时，无需系统 Node/JDK。\nunset NODE_OPTIONS NODE_PATH ELECTRON_NO_ASAR ELECTRON_ENABLE_LOGGING ELECTRON_LOG_FILE\nexport ELECTRON_RUN_AS_NODE=1\nexec ${quote(electronExecutable)} ${quote(hostScript)} ${quote(descriptorPath)} "$@"\n`;
   const manifest = {
     name: hostName,
     description: "词遇本机工作区连接",
@@ -124,18 +156,32 @@ function registerNativeHost({
     allowed_origins: origins,
   };
   const created = [];
+  const registry = platform === "win32" ? registryKey(browser, hostName) : "";
   try {
-    fs.writeFileSync(launcher, launcherText, { mode: 0o700, flag: firstInstall ? "wx" : "w" });
+    writeNativeLauncher({
+      launcher,
+      electronExecutable,
+      hostScript,
+      descriptorPath,
+      platform,
+      stubPath,
+      resourcesPath,
+      projectDir: projectDir || path.resolve(__dirname, "../../.."),
+    });
     if (firstInstall) created.push(launcher);
-    fs.chmodSync(launcher, 0o700);
     if (firstInstall) {
-      // 另一份 Desktop 同时注册同一浏览器目录时，由 O_EXCL 裁决，不能 rename 覆盖它。
       fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n", {
         mode: 0o600,
         flag: "wx",
       });
       created.push(manifestPath);
     } else writePrivateJson(manifestPath, manifest);
+    if (platform === "win32") {
+      const existing = readRegistryValue(registry);
+      if (existing && path.resolve(existing) !== path.resolve(manifestPath))
+        throw new Error("NATIVE_REGISTRATION_NOT_OWNED");
+      writeRegistryValue(registry, manifestPath);
+    }
     const registration = {
       format: "leximeet.native-registration/1",
       profileRoot,
@@ -149,13 +195,15 @@ function registerNativeHost({
       manifestPath,
       recordPath,
       isolated,
+      platform,
+      browser,
+      registryKey: registry || undefined,
       launcherSha256: digest(fs.readFileSync(launcher)),
       manifestSha256: digest(fs.readFileSync(manifestPath)),
     };
     writePrivateJson(recordPath, registration);
     return registration;
   } catch (error) {
-    // 只回滚本次独占创建的文件；从未改写已有的浏览器注册。
     for (const file of created.reverse()) fs.rmSync(file, { force: true });
     throw error;
   }
@@ -176,14 +224,16 @@ function assertRegistrationOwnership(record) {
     !path.isAbsolute(record.browserDataDir || "")
   )
     throw new Error("NATIVE_REGISTRATION_NOT_OWNED");
-  const key = digest(`${record.browserDataDir}\n${record.hostName}`).slice(0, 32);
   if (
-    record.manifestPath !==
-      path.join(record.browserDataDir, "NativeMessagingHosts", `${record.hostName}.json`) ||
-    record.launcher !==
-      path.join(record.profileRoot, "native-messaging", `${record.hostName}-${key}.sh`) ||
+    record.manifestPath !== expectedManifestPath(record) ||
+    record.launcher !== expectedLauncherPath(record) ||
     record.recordPath !==
-      path.join(record.profileRoot, "native-messaging", "registrations", `${key}.json`) ||
+      path.join(
+        record.profileRoot,
+        "native-messaging",
+        "registrations",
+        `${digest(`${record.browserDataDir}\n${record.hostName}`).slice(0, 32)}.json`,
+      ) ||
     record.descriptorPath !== path.join(record.profileRoot, "native-messaging", "lmcp-uds.json")
   )
     throw new Error("NATIVE_REGISTRATION_NOT_OWNED");
@@ -192,10 +242,18 @@ function assertRegistrationOwnership(record) {
     [record.launcher, record.launcherSha256],
   ]) {
     if (!fs.existsSync(file)) throw new Error("NATIVE_REGISTRATION_CHANGED");
-    assertPrivate(path.dirname(file), { directory: true });
-    const stat = assertPrivate(file);
+    let stat;
+    try {
+      assertPrivate(path.dirname(file), { directory: true });
+      stat = assertPrivate(file);
+    } catch (error) {
+      // Windows 上改写清单可能丢掉私有 ACL，与内容被改一样视为登记已变。
+      if (error.message === "UNSAFE_PRIVATE_PATH") throw new Error("NATIVE_REGISTRATION_CHANGED");
+      throw error;
+    }
+    const limit = file.endsWith(".exe") ? 1024 * 1024 : 65536;
     if (
-      stat.size > 65536 ||
+      stat.size > limit ||
       !/^[a-f0-9]{64}$/.test(hash || "") ||
       digest(fs.readFileSync(file)) !== hash
     )
@@ -210,6 +268,12 @@ function assertRegistrationOwnership(record) {
     JSON.stringify(manifest.allowed_origins) !== JSON.stringify(record.origins)
   )
     throw new Error("NATIVE_REGISTRATION_CHANGED");
+  if ((record.platform || "darwin") === "win32") {
+    const key = record.registryKey || registryKey(record.browser || "chrome", record.hostName);
+    const pointed = readRegistryValue(key);
+    if (!pointed || path.resolve(pointed) !== path.resolve(record.manifestPath))
+      throw new Error("NATIVE_REGISTRATION_NOT_OWNED");
+  }
   return true;
 }
 
@@ -219,8 +283,11 @@ function unregisterNativeHost(input) {
   assertRegistrationOwnership(record);
   if (record.profileRoot !== input.profileRoot || record.manifestPath !== input.manifestPath)
     throw new Error("NATIVE_REGISTRATION_NOT_OWNED");
+  if ((record.platform || "darwin") === "win32" && record.registryKey)
+    removeRegistryValue(record.registryKey);
   fs.rmSync(record.manifestPath);
   fs.rmSync(record.launcher);
+  fs.rmSync(`${record.launcher}.launch`, { force: true });
   fs.rmSync(record.recordPath);
   return { uninstalled: true, hostName: record.hostName };
 }
@@ -230,4 +297,5 @@ module.exports = {
   unregisterNativeHost,
   assertRegistrationOwnership,
   assertRunAsNodeEnabled,
+  findPeStub,
 };

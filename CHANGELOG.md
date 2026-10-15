@@ -2,6 +2,44 @@
 
 本文件记录面向使用者与贡献者的行为变化。1.0.0 本机正式构建与验收分别记录；发行说明与实际附件以对应 Release 为准。
 
+## [1.0.2] — 2026-10-14
+
+### 新增
+
+- 在已验收的 macOS arm64 之外支持 Windows x64（NSIS）与 Linux x64（AppImage + deb）。三端安装包齐套并完成安装验收后才发 1.0.2。
+- Windows 本机通道改为命名管道 + 传输令牌 + 收紧 DACL；描述符增加 `leximeet.{lmcp,mcp}-transport/1`，旧 `*-uds/1` 继续当 UDS。
+- Windows MCP / Native Host 使用随包 PE stub 与 `.launch` 旁路，满足官方 MCP SDK `shell:false`。
+- Native Messaging 覆盖 HKCU（Chrome / Edge 的 32 与 64 位视图）以及 Linux 用户级清单目录。
+- 私有文件在 NTFS 上用 ACL 保护；Linux 系统通知与 XDG 开机自启标为尽力支持。
+- GitHub Actions 矩阵覆盖 macos-15 / windows-2025 / ubuntu-24.04；干净 runner 上走 L2 安装冒烟。发布 feed 含 `win32-x64` / `linux-x64`。
+
+### 修复
+
+- 私有路径检查允许 macOS `/tmp` → `/private/tmp`、`/var` → `/private/var` 系统前缀，不再把本机 UDS 与临时目录误判为不安全。
+- Windows / Linux 的 core-cross 门禁先准备随包 Core 词典；lint 检出 `core-java` 以便核对文档链接。
+- Windows 单元测试不再依赖 POSIX 进程组或 inode 替换；`test:unit` 为单例加上时限，避免挂死占用整次作业。
+- Windows 路径断言、NTFS 权限、`whoami.exe` 与 ASAR 正斜杠抽取与本机语义对齐；非 macOS 不再要求系统焦点监测 complete。
+- 隔离目录回收在 Windows 上检查 NTFS ACL（拒绝 Everyone / Users / Authenticated Users），不再把缺少 POSIX 0o077 当成放行。
+- 停止本轮进程在 Windows 用 `taskkill /T`、macOS 按 PID 与子进程、Linux 仍用进程组；各平台都有「停止后子进程确实退出」的真实进程测试。
+- NTFS 收紧时目录用 `(OI)(CI)(F)`、文件只用 `(F)`，避免私有 JSON 写失败。Linux 的 `packageName` 放到 `deb`，符合 electron-builder 26 的 schema。
+- Linux `.deb` 补 `linux.maintainer` 与项目主页，满足 electron-builder FpmTarget；不把缺少作者邮箱当成可跳过。Windows CI 仅在 core-cross 单元/Core 测试中把工作区、TEMP 与 `java.exe` 排除出 Defender，并用 `TEMP` 把 JUnit 临时目录放到工作区内；不注入 `JAVA_TOOL_OPTIONS`。不改 Core 的 15 秒产品预算。
+- Desktop 等待 Core 启动：macOS/Linux 仍 45 秒；Windows 首次启动为 120 秒，覆盖 Defender 对随包 JRE 与 Jar 的实时扫描，不自动重试。install-smoke 的 Windows 任务保持 Defender 开启，用真实环境验证安装后启动。
+- Windows 上 Core 启动失败把 stderr 落到运行目录文件再读。优先 `javaw`；父进程立刻关掉自己的文件句柄，避免 Windows 上 `close` 永远等不到而把 CI 挂死。`stop` 用进程树有界结束。随包 JRE 补 `javaw.exe`。分类码在中文前缀乱码时仍认固定 `[CODE]`。
+- CI 拆成并行作业：lint 不阻塞；macOS verify / 七日旅程 / 打包三分片；Windows / Ubuntu 的 core-cross 与打包分开；install-smoke 只依赖对应平台安装包。启用 npm / Maven / Electron / electron-builder 缓存。作业超时收紧；门禁脚本超时后打印进程树。
+- `JavaRuntime.stop` 只在 Windows 立刻 `taskkill /T /F`；POSIX 先 SIGTERM，2.5 秒后再 SIGKILL，与注释中的宽限期一致。
+- Windows 提醒发音：PCM WAV 仍用 `SoundPlayer`；有道 / 微软默认的 MP3 改走 WPF `MediaPlayer`，临时文件带对应扩展名。
+- Linux 浏览器资料与 XDG 开机自启目录和 `appDataRoot` 共用隔离 home 规则：真实 home 才读 `process.env.XDG_CONFIG_HOME`。
+- Linux Desktop Entry 的 `Exec=` 按规范加双引号并转义，避免 AppImage 路径含空格时被拆开。
+- Windows PE stub 编进 `.runtime/native`，MSVC/MinGW 的 `.obj` 不落源码树，避免 NSIS 构建把清单判成脏工作区。macOS 打包验收通过 Playwright globalSetup 自行准备 Full 词典。install-smoke 在对应打包作业失败时跳过，不再拉不存在的产物。
+- Windows 上 Core 启动失败分类：退出后再读一次 stderr 文件，删除运行副本允许重试；`stop` 按 PID 确认仍存活再 `taskkill /T`，并拆掉 stdout。不用 `javaw`——它会脱离父进程，既丢 System.err 又杀不掉 JVM；改为 `java.exe` + `windowsHide` + 文件 stderr，对齐 Core 自己的进程测试。Windows 安装冒烟给 Electron 加 `--disable-gpu`，失败时打印资料目录与应用 stderr。
+- Windows `stop` 除 PID 外按 `--data-dir` 命令行回收仍持锁的 JVM，避免 Node 跟踪的 PID 对不上而留下 java.exe、挂住 `test:integration`。命令行查询的 PowerShell 用分号分隔赋值，并走 EncodedCommand；CIM 先按 `java.exe`/`javaw.exe`/`node.exe` 缩小。路径与过滤条件用单引号字面量，不再把 `JSON.stringify` 嵌进 PowerShell 双引号。JVM 增加 `-Dleximeet.instance` 供回收。`DATA_IN_USE` 等未占住目录的启动失败只按实例标记回收，不误杀同目录持锁进程。残留子进程超时后 `unref`，避免测试 runner 被句柄拖死。集成测试清理遇到 `EPERM` 不当成失败。Windows 冷启动探测 Maven/JDK 21 超时加宽并重试。CI 把 `TEMP` 指到工作区后先收紧该目录 ACL；LMCP 隔离夹具用 `ensurePrivateDirectory`，网关测试连接 `path`（命名管道没有 `socketPath`）。`icacls` / `reg.exe` / `whoami.exe` / `taskkill.exe` 固定 `%SystemRoot%\\System32\\<名字>.exe`；`powershell.exe` 单独解析 `%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`。不给测试补 PATH。Host catch 把 `error.message` 写到 stderr。Native 测试的 unregister 放进 `finally`，`hostName` 带每例独有后缀并按名字清 HKCU 残留。命名管道路径经环境变量传给 PowerShell；Win32 ACL 收紧失败则关闭监听并启动失败（`NAMED_PIPE_ACL_FAILED`）。`SetNamedSecurityInfo` 先按 `SE_FILE_OBJECT` 找 `\\\\.\\pipe\\<名>`，再回退 `SE_KERNEL_OBJECT`，避免把已监听的管道当成互斥/事件而报找不到文件。管道 DACL 断言接受 whoami 与 `WindowsIdentity` 的用户 SID 不一致，以及 `ConvertSecurityDescriptorToStringSecurityDescriptor` 把 RID 500 写成的 `LA`（也可认 `BA`）；传输单测不再要求回读必须含 `S-1-5-` 字面量。LMCP / MCP `start` 失败把 `error.message` 写到 stderr，安装冒烟失败时再打印 `logs/`。LMCP 接受新连接与查询状态时清掉已销毁或半开仍占槽的套接字，避免 Windows 命名管道上客户端先关、服务端 close 晚到时把后续握手挂死。生命周期用例在复用连接前等待管道实例回收，握手失败则重试。`test:lmcp:transport` 门禁加到 420 秒，覆盖 Windows 上每例 Restrict 的 PowerShell 开销。Native Host 撤销时，清单 ACL 不再私有也视为 `NATIVE_REGISTRATION_CHANGED`。Windows 登记用例检查 PE stub 与 `.launch` 旁路，不再在 exe 文本里找 `NODE_OPTIONS`。设置页与 `inspectClient` 把 `projectDir` / `resourcesPath` 传给启动器；未指定查找根时回退打包 `resources` 与仓库 `.runtime/native`，避免设置页/测试再报 `WINDOWS_PE_STUB_MISSING`。隔离 `homeDir` 的启动器写到该 home 下，不误用本机 `APPDATA` / `XDG_CONFIG_HOME`。读取 Codex TOML 的 `command` 时反转义，Windows 路径才能对上磁盘并保持幂等。MCP SDK 用例收尾加时限，Windows 上 `rmSync` 遇 `EPERM`/`EBUSY` 忽略，并把 PE stub 的 stderr 打出来。MCP 用例按 PE + `.launch` 断言；残留 UDS 夹具只在 POSIX 跑。NSIS 冒烟清理隔离目录遇 `EPERM`/`EBUSY` 不当成失败。Node 默认 DACL 不是独占，启动后回读 SDDL，只允许当前用户与 SYSTEM。进程树诊断带父进程 PID；后台测试拦截 `showErrorBox` 时把原始错误写到 stderr。外置 Host 白名单补 `powershell.cjs`。安装冒烟只加 `--disable-gpu`、保留软件光栅。隔离冒烟先创建 `AppData\\Roaming`/`Local`。词典下载失败重试并缓存 `.runtime/dictionary-source`，不回退本机 7897 / 12334 代理。macOS verify 的 `test:desktop` 门禁按约 1.5 倍实测放宽到 900 秒，作业超时 30 分钟。
+
+### 边界
+
+- Windows 不代码签名，发行说明写明 SmartScreen「未知发布者」。macOS 保持 ad-hoc，未公证。
+- 不做 Windows/Linux arm64、macOS Intel；不认 `CODEX_HOME`；不改 LMCP 1.0.0 冻结快照。
+- 浏览器仍只支持 Chrome + Edge。真实三家助手客户端与系统通知听感仍须人工验收。
+
 ## [1.0.1] — 2026-10-14
 
 ### 新增

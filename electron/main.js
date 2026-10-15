@@ -27,7 +27,7 @@ const backgroundTest = installBackgroundTest({
 });
 if (backgroundTest) globalThis.__leximeetTestBackground = backgroundTest;
 const { resolveProfile } = require("./services/profiles.cjs");
-const { JavaRuntime } = require("./services/java-runtime.cjs");
+const { JavaRuntime, coreStartTimeoutMs } = require("./services/java-runtime.cjs");
 const { LmcpGateway } = require("./services/lmcp/gateway.cjs");
 const { ConnectionSettings } = require("./services/connection-settings.cjs");
 const { McpGateway } = require("./services/mcp/gateway.cjs");
@@ -55,7 +55,10 @@ const profile = resolveProfile({
   name: process.env.LEXIMEET_PROFILE || (app.isPackaged ? "local" : "dev"),
   dataDir: process.env.LEXIMEET_DATA_DIR,
   projectDir,
-  userData: path.join(app.getPath("appData"), "LexiMeet"),
+  // 隔离冒烟会改 USERPROFILE；未创建 AppData\Roaming 时 getPath('appData') 会抛。
+  userData: process.env.LEXIMEET_DATA_DIR
+    ? process.env.LEXIMEET_DATA_DIR
+    : path.join(app.getPath("appData"), "LexiMeet"),
 });
 // 在导入框架和 ready 之前设置 Chromium 的目录，避免启动即写入默认 Electron 缓存。
 app.setPath("userData", profile.root);
@@ -82,8 +85,8 @@ const core = new JavaRuntime({
   profile: profile.name,
   testClockFile: process.env.LEXIMEET_TEST_CLOCK_FILE || "",
   demo: ["demo", "test"].includes(profile.name) && process.env.LEXIMEET_SEED_DEMO === "1",
-  // 连续隔离启动出现过 20s 冷启动超时；保留有界期限，给类加载和原生库解压留余量。
-  timeout: 45000,
+  // 连续隔离启动出现过 20s 冷启动超时；Windows 首次启动另加 Defender 扫描 Jar/JRE 的有界余量，不自动重试。
+  timeout: coreStartTimeoutMs(),
 });
 const { ElectronEgg } = require("ee-core");
 const { getMainWindow } = require("ee-core/electron");
@@ -196,13 +199,10 @@ const studyNotifications = new StudyNotifications({
   now: studyNow,
   Notification: silentTest ? SilentNotification : Notification,
   request: (data) => core.request("/api/desktop/command", "POST", data),
-  play:
-    process.platform === "darwin"
-      ? (word) =>
-          require("./services/reminder-audio.cjs").playReminderAudio(pronunciation, word, {
-            silent: silentTest,
-          })
-      : null,
+  play: (word) =>
+    require("./services/reminder-audio.cjs").playReminderAudio(pronunciation, word, {
+      silent: silentTest,
+    }),
   open: showMainWindow,
   changed: notifyChanged,
 });
@@ -235,6 +235,8 @@ const desktop = new DesktopController({
   archive,
   // 文件备份界面尚未开放；保留底层能力，供正式入口后续接入。
   fileBackupsEnabled: false,
+  homeDir: app.getPath("home"),
+  executablePath: process.execPath,
   createTray: () => {
     const icon = nativeImage.createFromPath(path.join(projectDir, "resources/brand/icon.png"));
     const tray = new Tray(icon.resize({ width: 20, height: 20 }));
@@ -298,6 +300,8 @@ ensureLauncher({
   homeDir: app.getPath("home"),
   electronExecutable: process.execPath,
   shimPath: mcpShimPath,
+  resourcesPath: app.isPackaged ? process.resourcesPath : undefined,
+  projectDir,
 });
 const assistantSettings = new AssistantSettings({
   core,
@@ -307,6 +311,8 @@ const assistantSettings = new AssistantSettings({
   shimPath: mcpShimPath,
   homeDir: app.getPath("home"),
   openExternal: (url) => shell.openExternal(url),
+  resourcesPath: app.isPackaged ? process.resourcesPath : undefined,
+  projectDir,
 });
 const browserDiscovery = new BrowserDiscovery({
   profile,
@@ -508,11 +514,17 @@ egg.register("electron-app-ready", () => {
     app.dock.setIcon(path.join(projectDir, "resources/brand/icon.png"));
   // 框架在此事件之前已获得单实例锁，第二实例不会启动第二个数据库写入者。
   startCore();
-  connector.start().catch(() => {
-    // 状态页显示失败，不能误报已连接。
+  connector.start().catch((error) => {
+    // 状态页显示失败，不能误报已连接；stderr 留给安装冒烟看原因。
+    process.stderr.write(
+      `${error.message}${error.cause?.message ? `: ${error.cause.message}` : ""}\n`,
+    );
   });
-  mcpGateway.start().catch(() => {
+  mcpGateway.start().catch((error) => {
     // AI 助手连接页显示失败，不自动拉起客户端。
+    process.stderr.write(
+      `${error.message}${error.cause?.message ? `: ${error.cause.message}` : ""}\n`,
+    );
   });
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([

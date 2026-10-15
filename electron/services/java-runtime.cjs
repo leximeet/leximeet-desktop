@@ -5,6 +5,7 @@ const { randomBytes } = require("node:crypto");
 const readline = require("node:readline");
 const { Readable, Transform } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
+const { signalTree, pidAlive, signalOwnedByMarker } = require("./platform/process-tree.cjs");
 
 const MAX_ARCHIVE_BYTES = 2 * 1024 * 1024 * 1024;
 const STARTUP_MESSAGES = Object.freeze({
@@ -26,12 +27,60 @@ function coreEnvironment(environment = process.env) {
   for (const key of ["JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS"]) delete result[key];
   return result;
 }
+const STARTUP_CODE_PATTERN = new RegExp(`\\[(${Object.keys(STARTUP_MESSAGES).join("|")})\\]`);
+
 function startupFailure(stderr, exitCode) {
-  const code = /Core 启动失败：\[([A-Z_]+)\]/.exec(stderr)?.[1];
+  const code =
+    /Core 启动失败：\[([A-Z_]+)\]/.exec(stderr)?.[1] || STARTUP_CODE_PATTERN.exec(stderr)?.[1];
   const message = STARTUP_MESSAGES[code];
   return message
     ? `本机核心启动失败 [${code}]：${message}`
     : `本机核心无法启动（退出码 ${Number.isInteger(exitCode) ? exitCode : "未知"}）；请检查完整安装包，资料仍保存在本机`;
+}
+
+/** 管道在 Windows 上可能随 System.exit 被丢弃；文件句柄与 Core 自己的测试一致。 */
+function attachStderr(child, { limit = 4000 } = {}) {
+  let diagnostic = "";
+  if (child.stderr) {
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk) => {
+      diagnostic = (diagnostic + chunk).slice(-limit);
+    });
+  }
+  return () => diagnostic;
+}
+
+function readLogTail(file, limit = 4000) {
+  try {
+    const bytes = fs.readFileSync(file);
+    if (!bytes.length) return "";
+    const utf8 = bytes.toString("utf8");
+    if (/Core 启动失败|DATA_IN_USE|\[[A-Z_]{4,}\]/.test(utf8)) return utf8.slice(-limit);
+    const utf16 = bytes.toString("utf16le");
+    if (/Core 启动失败|DATA_IN_USE|\[[A-Z_]{4,}\]/.test(utf16)) return utf16.slice(-limit);
+    return utf8.slice(-limit);
+  } catch {
+    return "";
+  }
+}
+
+/** Windows 必须用控制台子系统的 java.exe。javaw 会脱离父进程：stderr 丢失，stop 也杀不到 JVM。 */
+function preferWindowlessJava(java, { platform = process.platform } = {}) {
+  if (platform !== "win32" || typeof java !== "string") return java;
+  return java.replace(/javaw(?=\.exe$|$)/i, "java");
+}
+
+function spawnJava(java, args, env, stderrFile) {
+  const executable = preferWindowlessJava(java);
+  const stderrFd = fs.openSync(stderrFile, "w", 0o600);
+  const child = spawn(executable, args, {
+    stdio: ["ignore", "pipe", stderrFd],
+    // CREATE_NO_WINDOW + 重定向句柄，对齐 Core MainProcessTest 的文件 stderr。
+    windowsHide: true,
+    env,
+  });
+  fs.closeSync(stderrFd);
+  return child;
 }
 
 function javaExecutable(env = process.env) {
@@ -39,6 +88,11 @@ function javaExecutable(env = process.env) {
   if (env.JAVA_HOME)
     return path.join(env.JAVA_HOME, "bin", process.platform === "win32" ? "java.exe" : "java");
   return "java";
+}
+
+/** 产品等待 Core 写出端口的有界期限。Windows 首次启动会复制 Jar、拉起随包 JRE，Defender 实时扫描这些新文件。 */
+function coreStartTimeoutMs(platform = process.platform) {
+  return platform === "win32" ? 120000 : 45000;
 }
 
 // 主进程持有一次性令牌与动态端口；两者均不暴露给 renderer。
@@ -71,6 +125,7 @@ class JavaRuntime {
     this.starting = null;
     this.stopping = false;
     this.state = "stopped";
+    this.instanceId = null;
     this.lastError = null;
     this.generation = 0;
   }
@@ -99,6 +154,7 @@ class JavaRuntime {
       throw new Error("业务测试时钟只能在隔离 test 环境使用");
     this.stopping = false;
     this.token = randomBytes(32).toString("hex");
+    this.instanceId = randomBytes(8).toString("hex");
     fs.mkdirSync(this.dataDir, { recursive: true, mode: 0o700 });
     // JAR 类可能延迟加载；运行副本防止开发中重建原 JAR 破坏已启动进程。
     const runDir = fs.mkdtempSync(path.join(this.dataDir, "runtime-"));
@@ -107,6 +163,9 @@ class JavaRuntime {
     const args = [
       "--enable-native-access=ALL-UNNAMED",
       "-Dfile.encoding=UTF-8",
+      "-Dsun.stderr.encoding=UTF-8",
+      "-Dsun.stdout.encoding=UTF-8",
+      `-Dleximeet.instance=${this.instanceId}`,
       `-Djava.io.tmpdir=${runDir}`,
       "-jar",
       runJar,
@@ -124,27 +183,35 @@ class JavaRuntime {
       if (!args.includes("--profile")) args.push("--profile", "test");
       args.push("--test-clock-file", this.testClockFile);
     }
-    const child = spawn(this.java, args, {
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
-      env: coreEnvironment(),
-    });
+    const stderrFile = path.join(runDir, "stderr.log");
+    const child = spawnJava(this.java, args, coreEnvironment(), stderrFile);
     this.child = child;
     let diagnostic = "";
-    child.stderr.on("data", (chunk) => {
-      diagnostic = (diagnostic + chunk.toString()).slice(-4000);
-    });
-    const cleanup = () => {
+    const harvest = () => {
+      const text = readLogTail(stderrFile);
+      if (text) diagnostic = text;
+      return diagnostic;
+    };
+    const cleanupState = () => {
+      harvest();
       if (this.child === child) {
         this.port = null;
         this.state = this.stopping ? "stopped" : "failed";
         if (!this.stopping) this.lastError = "本地核心已停止，可以重启核心恢复；资料仍保存在本机";
       }
-      // 只回收本次创建的运行副本，数据库、备份和用户资料从不由此清理。
-      fs.rmSync(runDir, { recursive: true, force: true });
     };
-    child.once("exit", cleanup);
-    child.once("error", cleanup);
+    const removeRunDir = () => {
+      try {
+        fs.rmSync(runDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 50 });
+      } catch {
+        // Windows 上刚退出的 javaw 可能短暂占用运行副本；诊断已经读走。
+      }
+    };
+    child.once("exit", cleanupState);
+    child.once("error", () => {
+      cleanupState();
+      removeRunDir();
+    });
     try {
       await new Promise((resolve, reject) => {
         const lines = readline.createInterface({ input: child.stdout });
@@ -161,11 +228,19 @@ class JavaRuntime {
         child.once("error", () =>
           finish(new Error("无法启动随包 Java 21，请检查完整安装包与执行权限")),
         );
-        child.once("exit", (code) =>
-          finish(
-            new Error(this.stopping ? "Java Core 启动已取消" : startupFailure(diagnostic, code)),
-          ),
-        );
+        child.once("exit", (code) => {
+          const report = (text) => {
+            removeRunDir();
+            finish(new Error(this.stopping ? "Java Core 启动已取消" : startupFailure(text, code)));
+          };
+          const text = harvest();
+          if (this.stopping || STARTUP_CODE_PATTERN.test(text) || /Core 启动失败/.test(text)) {
+            report(text);
+            return;
+          }
+          // Windows 上 JVM 退出后文件刷新可能晚于 exit；短暂重试再分类。
+          setTimeout(() => report(harvest()), 80);
+        });
         lines.on("line", (line) => {
           let result;
           try {
@@ -316,28 +391,92 @@ class JavaRuntime {
   }
   async stop() {
     this.stopping = true;
+    // 未成功占住目录的启动失败（如 DATA_IN_USE）不得按资料目录回收，否则会误杀持锁原进程。
+    const ownedDirectory = Boolean(this.port) || this.state === "ready";
     this.port = null;
     this.generation++;
     this.state = "stopped";
     const child = this.child;
-    if (!child || !child.pid || child.exitCode !== null || child.signalCode !== null) return;
+    const pid = child?.pid;
+    const detachStdio = () => {
+      try {
+        child?.stdout?.destroy();
+      } catch {
+        /* 拆掉管道，避免 Node 为已死或将死的子进程一直等 close */
+      }
+    };
+    detachStdio();
+    // Windows 上 Node 跟踪的 PID 可能对不上真正持锁的 java.exe，立刻 taskkill /T /F。
+    // POSIX 留给后面的 2.5 秒 SIGTERM 宽限期，避免这里先 SIGKILL 让宽限失效。
+    if (process.platform === "win32" && Number.isInteger(pid) && pidAlive(pid)) {
+      try {
+        signalTree(pid, "SIGKILL");
+      } catch {
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    for (const marker of reclaimMarkers({
+      instanceId: this.instanceId,
+      dataDir: this.dataDir,
+      ownedDirectory,
+    })) {
+      try {
+        signalOwnedByMarker(marker);
+      } catch {
+        /* 按实例标记或资料目录回收失败时仍走下面的 PID 等待 */
+      }
+    }
+    if (!child || !pid || child.exitCode !== null || child.signalCode !== null) {
+      try {
+        child?.unref();
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
     await new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        child.kill("SIGKILL");
-      }, 2500);
-      timer.unref();
-      child.once("exit", () => {
-        clearTimeout(timer);
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        detachStdio();
+        try {
+          child.unref();
+        } catch {
+          /* 超时后放开句柄，避免测试进程被残留 JVM 拖住 */
+        }
+        clearTimeout(soft);
+        clearTimeout(hard);
         resolve();
-      });
-      child.once("error", () => {
-        clearTimeout(timer);
-        resolve();
-      });
+      };
+      const killTree = () => {
+        try {
+          signalTree(child.pid, "SIGKILL");
+        } catch {
+          child.kill("SIGKILL");
+        }
+      };
+      // POSIX 先 SIGTERM；Windows 立刻 taskkill /T /F，避免 javaw 残留挂住测试进程。
+      const soft = setTimeout(killTree, process.platform === "win32" ? 0 : 2500);
+      const hard = setTimeout(done, 8000);
+      child.once("exit", done);
+      child.once("error", done);
       child.kill();
     });
   }
 }
+/** 只有成功占住资料目录的实例才按 --data-dir 回收，避免误杀同目录持锁进程。 */
+function reclaimMarkers({ instanceId, dataDir, ownedDirectory }) {
+  const markers = [];
+  if (instanceId) markers.push(`leximeet.instance=${instanceId}`);
+  if (ownedDirectory && dataDir) markers.push(dataDir);
+  return markers;
+}
+
 // LMCP 查询与写入有不同的有界预算；超时不表示回滚，写入须查询原回执。
 function requestBudget(route, body) {
   if (["/api/import", "/api/export", "/api/snapshot"].includes(route)) return 90000;
@@ -346,4 +485,16 @@ function requestBudget(route, body) {
   const method = body?.envelope?.method;
   return ["recordEncounter", "openInDesktop"].includes(method) ? 15000 : 5000;
 }
-module.exports = { JavaRuntime, javaExecutable, requestBudget, coreEnvironment, startupFailure };
+module.exports = {
+  JavaRuntime,
+  javaExecutable,
+  requestBudget,
+  reclaimMarkers,
+  coreEnvironment,
+  startupFailure,
+  coreStartTimeoutMs,
+  attachStderr,
+  readLogTail,
+  spawnJava,
+  preferWindowlessJava,
+};

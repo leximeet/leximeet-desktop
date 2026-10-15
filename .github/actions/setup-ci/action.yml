@@ -1,0 +1,57 @@
+name: 准备 CI 运行时
+description: Node / JDK / Maven / Electron / electron-builder 缓存，以及可重试的 npm ci
+inputs:
+  java:
+    description: 是否安装 JDK 21 与 Maven 缓存
+    default: "true"
+  npm-ci:
+    description: 是否执行 npm ci
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      with:
+        node-version-file: .nvmrc
+        cache: npm
+    - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+      if: ${{ inputs.java == 'true' }}
+      with:
+        distribution: temurin
+        java-version: "21"
+        cache: maven
+    - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      if: ${{ inputs.java == 'true' }}
+      with:
+        python-version: "3.13"
+    - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: |
+          .runtime/electron-cache
+          .runtime/electron-builder
+        key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+        restore-keys: |
+          electron-${{ runner.os }}-${{ runner.arch }}-
+    - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: .runtime/dictionary-source
+        key: dictionary-source-${{ hashFiles('electron/services/text-dictionary-index.cjs') }}
+        restore-keys: |
+          dictionary-source-
+    - name: npm ci
+      if: ${{ inputs.npm-ci == 'true' }}
+      shell: bash
+      run: |
+        ok=0
+        for attempt in 1 2 3; do
+          if npm ci; then ok=1; break; fi
+          sleep $((attempt * 4))
+        done
+        test "$ok" = 1
+        node -e "
+          const fs = require('node:fs');
+          const { createHash } = require('node:crypto');
+          const lock = createHash('sha256').update(fs.readFileSync('package-lock.json')).digest('hex');
+          fs.mkdirSync('.runtime', { recursive: true });
+          fs.writeFileSync('.runtime/npm-ready.json', JSON.stringify({ lock, node: process.versions.node }));
+        "

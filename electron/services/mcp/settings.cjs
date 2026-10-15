@@ -21,6 +21,9 @@ class AssistantSettings {
     homeDir,
     openExternal = async () => {},
     env = process.env,
+    stubPath,
+    resourcesPath,
+    projectDir,
   }) {
     Object.assign(this, {
       core,
@@ -31,6 +34,9 @@ class AssistantSettings {
       homeDir,
       openExternal,
       env,
+      stubPath,
+      resourcesPath,
+      projectDir,
     });
   }
 
@@ -76,6 +82,9 @@ class AssistantSettings {
       openExternal: this.openExternal,
       preferDeeplink: false,
       preferCli: false,
+      stubPath: this.stubPath,
+      resourcesPath: this.resourcesPath,
+      projectDir: this.projectDir,
     };
   }
 
@@ -90,7 +99,12 @@ class AssistantSettings {
 
   testConnection() {
     return new Promise((resolve) => {
-      const launch = launchConfig(this.electronExecutable, this.shimPath, this.homeDir);
+      const launch = launchConfig(
+        this.electronExecutable,
+        this.shimPath,
+        this.homeDir,
+        this.options(),
+      );
       const child = spawn(
         launch.command,
         [...(launch.args || []), "--descriptor", this.gateway.descriptorPath, "--client", "cursor"],

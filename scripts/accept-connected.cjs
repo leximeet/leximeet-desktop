@@ -36,7 +36,7 @@ bash scripts/test-desktop.sh --connected --cleanup 会话UUID
 原独立资料只封存，不上传、不合并；配对必须由用户在真实界面确认。
 终端 stop/restart 可测试同一资料断线恢复。Ctrl+C 退出本轮两个应用并回收大目录，保留小日志。
 异常退出的环境保留供检查；--cleanup 只回收一个确认结束的会话，拒绝仍有进程或注册的环境。
-启动和声明门禁不等于联合验收通过。当前本机 Native 注册仅完成 macOS。
+启动和声明门禁不等于联合验收通过。真实 Native 联调当前覆盖 macOS/Linux；Windows 需人工验收。
 `;
 
 function writeRecord(file, value) {
@@ -107,18 +107,12 @@ async function waitDescriptor(
     if (child.exitCode !== null || child.signalCode !== null || child.spawnError)
       throw new Error("Desktop 在本机通道就绪前退出；请查看本次 desktop.log");
     if (fs.existsSync(file)) {
-      for (const [candidate, directory] of [
-        [path.dirname(file), true],
-        [file, false],
-      ]) {
-        const stat = fs.lstatSync(candidate);
-        if (
-          stat.isSymbolicLink() ||
-          (directory ? !stat.isDirectory() : !stat.isFile()) ||
-          stat.mode & 0o077 ||
-          (typeof process.getuid === "function" && stat.uid !== process.getuid())
-        )
-          throw new Error("Desktop 私有 descriptor 身份或权限不安全");
+      try {
+        const { assertPrivate } = require("../electron/services/lmcp/private-files.cjs");
+        assertPrivate(path.dirname(file), { directory: true });
+        assertPrivate(file);
+      } catch {
+        throw new Error("Desktop 私有 descriptor 身份或权限不安全");
       }
       return file;
     }
@@ -236,10 +230,19 @@ async function verifyDesktopHandoff(page, options = {}) {
   );
 }
 
-// 只记录和结束本轮 spawn 的进程组；不按进程名称搜索系统。
+const processTree = require("../electron/services/platform/process-tree.cjs");
+
+// 只记录和结束本轮 spawn 的进程树；不按进程名称搜索系统。
 class OwnedProcesses {
-  constructor({ record, save, kill = process.kill, sleep = delay }) {
-    Object.assign(this, { record, save, kill, sleep });
+  constructor({
+    record,
+    save,
+    kill,
+    sleep = delay,
+    signalTree = processTree.signalTree,
+    treeAlive = processTree.treeAlive,
+  }) {
+    Object.assign(this, { record, save, kill, sleep, signalTree, treeAlive });
     this.children = new Map();
     this.stopping = null;
   }
@@ -276,20 +279,16 @@ class OwnedProcesses {
   signal(child, signal) {
     if (!this.alive(child) && !this.groupAlive(child)) return;
     try {
-      this.kill(-child.pid, signal);
+      if (this.kill) this.kill(process.platform === "linux" ? -child.pid : child.pid, signal);
+      else this.signalTree(child.pid, signal);
     } catch (error) {
-      if (error.code !== "ESRCH") throw error;
+      if (error.code !== "ESRCH" && error.code !== "EPERM") throw error;
     }
   }
   groupAlive(child) {
     if (!Number.isInteger(child.pid) || child.spawnError) return false;
-    try {
-      process.kill(-child.pid, 0);
-      return true;
-    } catch (error) {
-      if (error.code === "ESRCH") return false;
-      throw error;
-    }
+    if (this.kill) return this.alive(child);
+    return this.treeAlive(child.pid);
   }
   async stopChild(child) {
     if (!this.alive(child) && !this.groupAlive(child)) return;
@@ -351,8 +350,8 @@ async function startPackagedLab(
     onRecord = () => {},
   } = {},
 ) {
-  if (process.platform !== "darwin")
-    throw new Error("本轮 Native Host 仅完成 macOS；其他平台需独立验收");
+  if (!["darwin", "linux"].includes(process.platform))
+    throw new Error("真实 Native Host 联调当前覆盖 macOS/Linux；Windows 需人工验收");
   if (Number(process.versions.node.split(".")[0]) < 24)
     throw new Error("请通过外层脚本准备 Node.js 24+");
   if (typeof headless !== "boolean") throw new Error("headless 必须是布尔值");
@@ -361,15 +360,13 @@ async function startPackagedLab(
   signal?.throwIfAborted();
   const id = randomUUID(),
     directory = path.join(connectedSessionRoot(), id);
-  require("../electron/services/lmcp/private-files.cjs").ensurePrivateDirectory(
-    connectedSessionRoot(),
-  );
-  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  fs.chmodSync(directory, 0o700);
+  const { ensurePrivateDirectory } = require("../electron/services/lmcp/private-files.cjs");
+  ensurePrivateDirectory(connectedSessionRoot());
+  ensurePrivateDirectory(directory);
   const logsDir = path.join(directory, "logs");
-  fs.mkdirSync(logsDir, { mode: 0o700 });
+  ensurePrivateDirectory(logsDir);
   const profileRoot = path.join(directory, "desktop");
-  fs.mkdirSync(profileRoot, { mode: 0o700 });
+  ensurePrivateDirectory(profileRoot);
   const browserDataDir = path.join(profileRoot, "browser-profile/chrome");
   const extensionDir = path.join(directory, "browser-extension");
   const recordFile = path.join(directory, "acceptance.json");
@@ -501,7 +498,7 @@ async function startPackagedLab(
     if (alive()) {
       // PID 来自本轮创建的持久 Chromium CDP，不能按进程名称或日常 profile 清理。
       try {
-        process.kill(-pid, "SIGKILL");
+        processTree.signalTree(pid, "SIGKILL");
       } catch (error) {
         if (error.code !== "ESRCH") throw error;
       }

@@ -73,7 +73,24 @@ function verifyPackageMaterials({ projectDir, resourcesDir }) {
   };
   const archive = path.join(resourcesDir, "app.asar");
   assertRuntimeDependencyBoundary(archive);
-  const fromAsar = (file) => () => extractFile(archive, file, false);
+  const asarKeyByPosix = new Map();
+  const toPosix = (entry) => entry.replace(/\\/g, "/").replace(/^\/+/, "");
+  const toExtractKey = (entry) => entry.replace(/^[/\\]+/, "");
+  for (const entry of listPackage(archive)) asarKeyByPosix.set(toPosix(entry), toExtractKey(entry));
+  const fromAsar = (file) => () => {
+    const posix = toPosix(file);
+    const mapped = asarKeyByPosix.get(posix);
+    const candidates = [mapped, posix, posix.replace(/\//g, "\\")].filter(Boolean);
+    let lastError;
+    for (const key of [...new Set(candidates)]) {
+      try {
+        return extractFile(archive, key, false);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError || new Error(`缺少物料原文：${posix}`);
+  };
   for (const file of ["LICENSE", "frontend/src/assets/audio/NOTICE.md"])
     compare(`app.asar/${file}`, file, fromAsar(file));
   // 公开资源许可与协议冻结物料都按原字节随包，不仅检查文件名存在。
@@ -129,13 +146,18 @@ function verifyPackageMaterials({ projectDir, resourcesDir }) {
     "host/main.cjs": "electron/native-host/main.cjs",
     "services/lmcp/framing.cjs": "electron/services/lmcp/framing.cjs",
     "services/lmcp/private-files.cjs": "electron/services/lmcp/private-files.cjs",
+    "services/platform/private-files.cjs": "electron/services/platform/private-files.cjs",
+    "services/platform/win32-acl.cjs": "electron/services/platform/win32-acl.cjs",
+    "services/platform/powershell.cjs": "electron/services/platform/powershell.cjs",
+    "services/platform/identity.cjs": "electron/services/platform/identity.cjs",
+    "services/platform/transport.cjs": "electron/services/platform/transport.cjs",
   };
   if (
     host.format !== "leximeet.native-host-bundle/1" ||
     host.entry !== "host/main.cjs" ||
-    host.files?.length !== 3
+    host.files?.length !== Object.keys(hostSources).length
   )
-    throw new Error("Native Host 清单不是固定三项物料");
+    throw new Error("Native Host 清单不是固定物料集合");
   const seen = new Set();
   for (const file of host.files) {
     if (!hostSources[file.path] || seen.has(file.path))
@@ -151,13 +173,19 @@ function verifyPackageMaterials({ projectDir, resourcesDir }) {
     "services/mcp/stdio-framing.cjs": "electron/services/mcp/stdio-framing.cjs",
     "services/lmcp/framing.cjs": "electron/services/lmcp/framing.cjs",
     "services/lmcp/private-files.cjs": "electron/services/lmcp/private-files.cjs",
+    "services/platform/private-files.cjs": "electron/services/platform/private-files.cjs",
+    "services/platform/win32-acl.cjs": "electron/services/platform/win32-acl.cjs",
+    "services/platform/powershell.cjs": "electron/services/platform/powershell.cjs",
+    "services/platform/identity.cjs": "electron/services/platform/identity.cjs",
+    "services/platform/transport.cjs": "electron/services/platform/transport.cjs",
+    "services/platform/app-paths.cjs": "electron/services/platform/app-paths.cjs",
   };
   if (
     mcp.format !== "leximeet.mcp-host-bundle/1" ||
     mcp.entry !== "host/main.cjs" ||
-    mcp.files?.length !== 4
+    mcp.files?.length !== Object.keys(mcpSources).length
   )
-    throw new Error("MCP Host 清单不是固定四项物料");
+    throw new Error("MCP Host 清单不是固定物料集合");
   const mcpSeen = new Set();
   for (const file of mcp.files) {
     if (!mcpSources[file.path] || mcpSeen.has(file.path))

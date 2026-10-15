@@ -29,7 +29,8 @@ test(
     fs.mkdirSync(bin, { recursive: true });
     const electron = electronBinary();
     const shim = path.resolve(__dirname, "../../electron/mcp-host/main.cjs");
-    const launch = launchConfig(electron, shim, home);
+    const projectDir = path.resolve(__dirname, "../..");
+    const launch = launchConfig(electron, shim, home, { projectDir });
     const claudeConfig = path.join(home, ".claude.json");
     fs.writeFileSync(
       path.join(bin, "claude"),
@@ -46,16 +47,23 @@ test(
       electronExecutable: electron,
       shimPath: shim,
       env: { PATH: bin },
-      preferCli: true,
+      preferCli: process.platform !== "win32",
+      projectDir,
     });
-    assert.equal(cli.method, "cli");
+    if (process.platform !== "win32") assert.equal(cli.method, "cli");
     const written = JSON.parse(fs.readFileSync(claudeConfig, "utf8"));
     assert.equal(written.mcpServers.leximeet.command, launch.command);
     assert.deepEqual(written.mcpServers.leximeet.args, []);
     assert.equal(written.mcpServers.leximeet.env, undefined);
-    const script = fs.readFileSync(launch.command, "utf8");
-    assert.match(script, /export ELECTRON_RUN_AS_NODE=1/);
-    assert.doesNotMatch(script, /--run-as-node/);
+    if (process.platform === "win32") {
+      const sidecar = fs.readFileSync(`${launch.command}.launch`, "utf8");
+      assert.match(sidecar, /electron=/);
+      assert.match(sidecar, /script=/);
+    } else {
+      const script = fs.readFileSync(launch.command, "utf8");
+      assert.match(script, /export ELECTRON_RUN_AS_NODE=1/);
+      assert.doesNotMatch(script, /--run-as-node/);
+    }
     assert.doesNotMatch(cli.copyCommand, /--run-as-node/);
 
     const runtime = new JavaRuntime({
@@ -70,10 +78,16 @@ test(
       homeDir: home,
       awaitReady: async () => {},
     });
+    const settle = (work, ms = 3000) =>
+      Promise.race([work().catch(() => {}), new Promise((resolve) => setTimeout(resolve, ms))]);
     t.after(async () => {
-      await gateway.close();
-      await runtime.stop();
-      fs.rmSync(root, { recursive: true, force: true });
+      await settle(() => gateway.close());
+      await settle(() => runtime.stop());
+      try {
+        fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+      } catch (error) {
+        if (!error || !["EPERM", "EBUSY", "ENOENT"].includes(error.code)) throw error;
+      }
     });
     await runtime.start();
     await gateway.start();
@@ -85,17 +99,33 @@ test(
       args: written.mcpServers.leximeet.args,
       stderr: "pipe",
       env: {
+        ...process.env,
         HOME: home,
-        PATH: process.env.PATH,
+        USERPROFILE: home,
+        APPDATA: path.join(home, "AppData", "Roaming"),
+        LOCALAPPDATA: path.join(home, "AppData", "Local"),
         LEXIMEET_MCP_DESCRIPTOR: gateway.descriptorPath,
         LEXIMEET_MCP_CLIENT: "cursor",
       },
     });
     const client = new Client({ name: "leximeet-e2e", version: "1.0.1" });
-    await client.connect(transport);
-    t.after(async () => {
-      await client.close().catch(() => {});
+    t.after(() =>
+      settle(async () => {
+        await client.close().catch(() => {});
+        await transport.close?.().catch(() => {});
+      }),
+    );
+    let stderr = "";
+    const connected = client.connect(transport);
+    transport.stderr?.on("data", (chunk) => {
+      stderr += chunk;
+      process.stderr.write(chunk);
     });
+    try {
+      await connected;
+    } catch (error) {
+      assert.fail(`MCP SDK 连接失败：${error.message}${stderr ? `\n${stderr}` : ""}`);
+    }
     const listed = await client.listTools();
     assert.equal(listed.tools.length, 4);
     assert.equal(listed.tools[0].name, "leximeet_help");

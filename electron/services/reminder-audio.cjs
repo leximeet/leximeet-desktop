@@ -2,28 +2,90 @@
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
-const { execFile } = require("node:child_process");
+const { execFile, execFileSync } = require("node:child_process");
 const { promisify } = require("node:util");
 
-// macOS 系统通知的显式播放动作：复用发音提供者，临时文件用完删除，不拉起采集/练习窗口。
-async function playReminderAudio(pronunciation, word, { silent = false } = {}) {
+function firstOnPath(names) {
+  for (const name of names) {
+    try {
+      const result = execFileSync(process.platform === "win32" ? "where" : "which", [name], {
+        encoding: "utf8",
+        windowsHide: true,
+        timeout: 3000,
+      });
+      const file = result.trim().split(/\r?\n/)[0];
+      if (file) return file;
+    } catch {
+      /* 继续尝试下一个 */
+    }
+  }
+  return "";
+}
+
+function isWaveAudio(audio) {
+  return /wav|wave/i.test(String(audio?.mime || ""));
+}
+
+function reminderAudioFileName(mime) {
+  const type = String(mime || "").toLowerCase();
+  if (type.includes("wav") || type.includes("wave")) return "pronunciation.wav";
+  if (type.includes("ogg")) return "pronunciation.ogg";
+  return "pronunciation.mp3";
+}
+
+function windowsPlayerCommand(file, audio) {
+  const quoted = file.replace(/'/g, "''");
+  const { windowsPowerShellBinary } = require("./platform/identity.cjs");
+  const volume = Number(audio?.volume);
+  const level = Number.isFinite(volume) ? Math.min(1, Math.max(0, volume)) : 1;
+  // SoundPlayer 只播 PCM WAV；有道 / 微软默认是 MP3，改走 WPF MediaPlayer。
+  const command = isWaveAudio(audio)
+    ? `(New-Object Media.SoundPlayer '${quoted}').PlaySync()`
+    : [
+        "Add-Type -AssemblyName presentationCore",
+        "$p = New-Object System.Windows.Media.MediaPlayer",
+        `$p.Open([uri]([System.IO.Path]::GetFullPath('${quoted}')))`,
+        `$p.Volume = ${level}`,
+        "$p.Play()",
+        "$until = [DateTime]::UtcNow.AddSeconds(28)",
+        "do { Start-Sleep -Milliseconds 80 } while (-not $p.NaturalDuration.HasTimeSpan -and [DateTime]::UtcNow -lt $until)",
+        "if ($p.NaturalDuration.HasTimeSpan) { $remain = $p.NaturalDuration.TimeSpan.TotalMilliseconds - $p.Position.TotalMilliseconds; if ($remain -gt 0) { Start-Sleep -Milliseconds ([Math]::Min([int]$remain, 28000)) } }",
+        "$p.Close()",
+      ].join("; ");
+  return {
+    command: windowsPowerShellBinary(),
+    args: ["-NoProfile", "-NonInteractive", "-Command", command],
+  };
+}
+
+function playerCommand(file, audio, platform = process.platform) {
+  if (platform === "darwin")
+    return {
+      command: "/usr/bin/afplay",
+      args: ["-v", String(audio.volume ?? 1), "-r", String(audio.rate ?? 1), file],
+    };
+  if (platform === "win32") return windowsPlayerCommand(file, audio);
+  const paplay = firstOnPath(["paplay", "pw-play", "aplay"]);
+  if (!paplay) throw new Error("REMINDER_AUDIO_PLAYER_MISSING");
+  return { command: paplay, args: [file] };
+}
+
+// 系统通知的显式播放：复用发音提供者，临时文件用完删除，不拉起采集/练习窗口。
+async function playReminderAudio(
+  pronunciation,
+  word,
+  { silent = false, platform = process.platform } = {},
+) {
   const audio = await pronunciation.speak({ word });
-  // 后台测试仍走提供者/缓存/失败链路，禁止另起 afplay 占用操作者的音频设备。
-  // 扬声器听感与通知朗读的真实输出单独人工验收，不由此分支冒称通过。
   if (silent) return;
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "leximeet-reminder-audio-"));
   try {
-    const file = path.join(directory, "pronunciation.audio");
-    await fs.writeFile(file, Buffer.from(audio.data, "base64"), {
-      mode: 0o600,
-    });
-    await promisify(execFile)(
-      "/usr/bin/afplay",
-      ["-v", String(audio.volume ?? 1), "-r", String(audio.rate ?? 1), file],
-      { timeout: 30000 },
-    );
+    const file = path.join(directory, reminderAudioFileName(audio.mime));
+    await fs.writeFile(file, Buffer.from(audio.data, "base64"), { mode: 0o600 });
+    const player = playerCommand(file, audio, platform);
+    await promisify(execFile)(player.command, player.args, { timeout: 30000, windowsHide: true });
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }
 }
-module.exports = { playReminderAudio };
+module.exports = { playReminderAudio, playerCommand, reminderAudioFileName };

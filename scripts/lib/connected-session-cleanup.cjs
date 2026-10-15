@@ -3,6 +3,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { randomUUID } = require("node:crypto");
 const { connectedSessionRoot } = require("./connected-session-path.cjs");
+const { assertWindowsPrivate } = require("../../electron/services/platform/win32-acl.cjs");
+const { pidAlive, treeAlive } = require("../../electron/services/platform/process-tree.cjs");
 const SESSION_ID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const MANAGED_DIRECTORIES = Object.freeze(["application", "desktop", "browser-extension"]);
 
@@ -12,6 +14,16 @@ function privateDirectory(directory) {
     throw new Error("拒绝回收软链接或非本轮真实目录");
   if (typeof process.getuid === "function" && stat.uid !== process.getuid())
     throw new Error("拒绝回收其他用户的隔离目录");
+  if (process.platform === "win32") {
+    try {
+      assertWindowsPrivate(directory);
+    } catch (error) {
+      if (error.message === "UNSAFE_PRIVATE_PATH")
+        throw new Error("隔离目录权限不安全，保留资料供检查");
+      throw error;
+    }
+    return;
+  }
   if ((stat.mode & 0o077) !== 0) throw new Error("隔离目录权限不安全，保留资料供检查");
 }
 function readSmallJson(file) {
@@ -21,15 +33,7 @@ function readSmallJson(file) {
   return JSON.parse(fs.readFileSync(file, "utf8"));
 }
 function processExists(pid) {
-  for (const identity of [pid, -pid]) {
-    try {
-      process.kill(identity, 0);
-      return true;
-    } catch (error) {
-      if (error.code !== "ESRCH") return true;
-    }
-  }
-  return false;
+  return pidAlive(pid) || treeAlive(pid);
 }
 
 // 只回收一个已结束会话的三个自有大目录；日志和验收记录保留，不扫描或清理其他会话。

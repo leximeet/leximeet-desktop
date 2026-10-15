@@ -8,16 +8,16 @@ const { connectedSessionRoot } = require("../../scripts/lib/connected-session-pa
 const { reclaimConnectedSession } = require("../../scripts/lib/connected-session-cleanup.cjs");
 const { parseArguments } = require("../../scripts/lib/connected-readiness.cjs");
 const launcher = require("../../scripts/accept-connected.cjs");
+const { ensurePrivateDirectory } = require("../../electron/services/platform/private-files.cjs");
+const { windowsSystem32Binary } = require("../../electron/services/platform/identity.cjs");
 
 function fixture(t) {
-  const root = connectedSessionRoot();
-  fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+  const root = ensurePrivateDirectory(connectedSessionRoot());
   const id = randomUUID(),
-    directory = path.join(root, id);
-  fs.mkdirSync(directory, { mode: 0o700 });
+    directory = ensurePrivateDirectory(path.join(root, id));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   for (const name of ["application", "desktop", "browser-extension", "logs"]) {
-    fs.mkdirSync(path.join(directory, name), { mode: 0o700 });
+    ensurePrivateDirectory(path.join(directory, name));
     fs.writeFileSync(path.join(directory, name, "owned.txt"), name);
   }
   const record = {
@@ -105,6 +105,26 @@ test("目录或回收目标的软链接拒绝处理，外部文件保持不变",
   assert.equal(fs.existsSync(path.join(f.directory, "application/owned.txt")), true);
   assert.equal(fs.existsSync(path.join(outside.directory, "browser-extension/owned.txt")), true);
 });
+test("Windows 回收拒绝 Everyone/Users/Authenticated Users 仍可访问的隔离目录", (t) => {
+  if (process.platform !== "win32") return t.skip("需要真实 NTFS 与 icacls");
+  const { execFileSync } = require("node:child_process");
+  const icacls = windowsSystem32Binary("icacls.exe");
+  const f = fixture(t);
+  const trustees = ["Everyone", "*S-1-5-32-545", "*S-1-5-11"];
+  for (const trustee of trustees) {
+    execFileSync(icacls, [f.directory, "/grant", `${trustee}:(R)`, "/Q"], {
+      windowsHide: true,
+    });
+    assert.throws(() => reclaimConnectedSession(f.id), /隔离目录权限不安全/);
+    execFileSync(icacls, [f.directory, "/remove:g", trustee, "/Q"], {
+      windowsHide: true,
+    });
+  }
+  assert.equal(fs.existsSync(path.join(f.directory, "application/owned.txt")), true);
+  ensurePrivateDirectory(f.directory);
+  assert.equal(reclaimConnectedSession(f.id).artifactsReclaimed, true);
+});
+
 test("cleanup CLI 不准备工具、不启动环境且不接受其他操作", async () => {
   const id = randomUUID();
   assert.deepEqual(parseArguments(["--cleanup", id]).sessionId, id);

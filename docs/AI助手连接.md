@@ -2,17 +2,17 @@
 
 1.0.1 起，词遇桌面可以把本机词典、单词本和学习进度提供给 **Cursor、Codex、Claude Code**。功能名叫「AI 助手连接」，使用官方 [Model Context Protocol](https://modelcontextprotocol.io/)，和浏览器插件用的 **LMCP** 不是同一套协议。
 
-当前只支持 **macOS arm64**。Windows / Linux 以及 Windsurf、Claude Desktop、VS Code 不在本版范围。
+1.0.2 起支持 **macOS arm64、Windows x64、Linux x64**。Windsurf、Claude Desktop、VS Code 以及 Firefox 不在本版范围。
 
 ## 和 LMCP 的区别
 
-|          | AI 助手连接（MCP）                                  | 插件连接（LMCP 1.0.0）                |
-| -------- | --------------------------------------------------- | ------------------------------------- |
-| 给谁用   | Cursor / Codex / Claude Code                        | 浏览器插件                            |
-| 传输     | 客户端 stdio → 启动脚本 → 薄 shim → 本机 UDS → Core | Native Messaging → UDS → Core         |
-| 默认能力 | 只读查询                                            | 查词与采集（经配对授权）              |
-| 写入     | 仅「加入单词本」，默认关，需设置授权                | `recordEncounter`（用户在网页确认后） |
-| 复习判题 | 不允许                                              | 不在 LMCP 提供                        |
+|          | AI 助手连接（MCP）                                | 插件连接（LMCP 1.0.0）                |
+| -------- | ------------------------------------------------- | ------------------------------------- |
+| 给谁用   | Cursor / Codex / Claude Code                      | 浏览器插件                            |
+| 传输     | 客户端 stdio → 启动器 → 薄 shim → 本机通道 → Core | Native Messaging → 本机通道 → Core    |
+| 默认能力 | 只读查询                                          | 查词与采集（经配对授权）              |
+| 写入     | 仅「加入单词本」，默认关，需设置授权              | `recordEncounter`（用户在网页确认后） |
+| 复习判题 | 不允许                                            | 不在 LMCP 提供                        |
 
 两者复用同一套本机帧、私有文件和 Core 资料，但不共享配对票据或 Core HTTP 令牌。
 
@@ -31,7 +31,15 @@
 
 优先级：官方 CLI / deeplink → 安全写配置 → 复制命令。写入前先备份为 `.leximeet.bak.<时间>`，只保留最近 3 份；解析失败则不写；只改 `leximeet` 一个键；尽量保留注释和格式（TOML 表头含行尾注释、空白、引号键名与 `[[数组表]]`）；发现文件在写入前被改过就重试或放弃；临时文件带随机后缀再原子改名；重复接入保持幂等。
 
-三家客户端都只配置 **一条稳定启动脚本** 的绝对路径（macOS 为 `~/Library/Application Support/LexiMeet/mcp/leximeet-mcp`）。脚本内容仿 Native Host：`export ELECTRON_RUN_AS_NODE=1` 后 `exec` 随包 Electron 与 shim。`--run-as-node` 不是有效参数，不会写入配置。应用升级或移动后会重写脚本，用户配置不用改。
+三家客户端都只配置 **一条稳定启动器** 的绝对路径，不含 Core 令牌或端口。`--run-as-node` 不是有效参数，不会写入配置。应用升级或移动后会重写启动器，用户配置不用改。设置页检测、一键接入和测试连接与启动时共用同一套 PE stub 查找（打包 `resources/native`，开发态仓库 `.runtime/native`）。
+
+| 平台    | 启动器                                                                     |
+| ------- | -------------------------------------------------------------------------- |
+| macOS   | `~/Library/Application Support/LexiMeet/mcp/leximeet-mcp`（`#!/bin/sh`）   |
+| Linux   | `~/.config/LexiMeet/mcp/leximeet-mcp`（`#!/bin/sh`）                       |
+| Windows | `%APPDATA%\LexiMeet\mcp\leximeet-mcp.exe`（随包 PE stub + `.launch` 旁路） |
+
+只写官方默认配置文件，不认 `CODEX_HOME`。Windows 复制命令使用 PowerShell 引号。
 
 | 客户端      | 官方方式                                                                                                          | 配置位置                                           | 本机写入                                                        |
 | ----------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------- |
@@ -72,7 +80,7 @@ flowchart LR
 - Electron 只做转发和配置写入；工具定义、路由、权限和参数校验在 Core。
 - 启动脚本用随包 Electron 的 Node 模式，不要求用户安装 JDK，也不会拉起词遇窗口。
 - shim 每次请求重新解析指针/描述符，桌面稍后打开时按需重连。
-- 桌面启动后在 profile 内写 `mcp/mcp-uds.json`（0600），正式资料还会写 `~/Library/Application Support/LexiMeet/mcp/current.json` 指针。
+- 桌面启动后在 profile 内写 MCP 描述符（macOS/Linux 为 UDS，Windows 为命名管道），正式资料还会写各平台 appData 下的 `mcp/current.json` 指针。Windows 私有文件用 ACL，POSIX 为 0600。
 - 网关转发固定使用握手时的 `clientId`，`tools/call` 限流，并遵守转发超时。
 - Core 令牌与动态端口只留在 Main 进程。
 
@@ -87,4 +95,4 @@ flowchart LR
 
 自动化覆盖路由/权限/参数、配置写入 fixture、MCP schema 快照、Core HTTP、shim、启动脚本、无密钥与畸形帧，以及真实 Electron + 官方 MCP TypeScript SDK 的 `initialize` / `tools/list` / `query`。入口：`npm run verify:mcp:contract`、`npm run test:mcp`，已接入 `scripts/test-desktop.sh --verify` 与 `ci.yml`。
 
-本机还需要你亲自确认：真实 Cursor / Codex / Claude Code 一键接入、查词、授权后加词、断开后配置干净。云端无法代替这三家客户端的端到端操作，也不能代替 macOS 签名与公证。
+本机还需要你亲自确认：各平台真实 Cursor / Codex / Claude Code 一键接入、查词、授权后加词、断开后配置干净。云端无法代替这三家客户端的端到端操作，也不能代替 SmartScreen / Gatekeeper 与公证。

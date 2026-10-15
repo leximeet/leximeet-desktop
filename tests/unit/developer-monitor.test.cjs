@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const path = require("node:path");
 const { DeveloperMonitor } = require("../../electron/services/developer-monitor.cjs");
 const { createBridge } = require("../../electron/services/bridge.cjs");
 const { DesktopController } = require("../../electron/services/desktop-controller.cjs");
@@ -183,6 +184,7 @@ test("关闭系统登录项也必须校验真实状态，不能把无效setter�
 
 test("原生操作只允许固定动作/本机目录，验收环境不能修改系统登录项", async () => {
   const opened = [];
+  const ownedRoot = path.join(path.sep, "owned", "test");
   const desktop = new DesktopController({
     app: { isPackaged: true },
     shell: {
@@ -191,7 +193,7 @@ test("原生操作只允许固定动作/本机目录，验收环境不能修改�
         return "";
       },
     },
-    profile: { name: "test", root: "/owned/test" },
+    profile: { name: "test", root: ownedRoot },
     platform: "darwin",
     restartCore: async () => {},
     runtime: () => ({ coreState: "ready" }),
@@ -204,7 +206,7 @@ test("原生操作只允许固定动作/本机目录，验收环境不能修改�
     await assert.rejects(desktop.action(payload));
   await desktop.action({ action: "showDataFolder" });
   await desktop.action({ action: "showLogsFolder" });
-  assert.deepEqual(opened, ["/owned/test", "/owned/test/logs"]);
+  assert.deepEqual(opened, [ownedRoot, path.join(ownedRoot, "logs")]);
   desktop.apply({ closeBehavior: "quit", launchAtLogin: false });
   assert.equal(desktop.shouldHide(), false);
   assert.equal((await desktop.action({ action: "restartCore" })).runtime.coreState, "ready");

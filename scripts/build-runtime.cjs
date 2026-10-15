@@ -3,6 +3,19 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const root = path.resolve(__dirname, "..");
 
+/** Windows 随包 JRE 必须带 javaw，Desktop 用它写 stderr 文件，避免隐藏控制台丢掉启动分类。 */
+function ensureWindowsJavaw(image, javaHome, platform = process.platform) {
+  if (platform !== "win32") return null;
+  const imageJavaw = path.join(image, "bin", "javaw.exe");
+  if (fs.existsSync(imageJavaw)) return imageJavaw;
+  const hostJavaw = path.join(javaHome, "bin", "javaw.exe");
+  if (!fs.existsSync(hostJavaw))
+    throw new Error("Windows 随包运行时需要 javaw.exe，避免隐藏控制台丢掉启动诊断");
+  fs.mkdirSync(path.dirname(imageJavaw), { recursive: true });
+  fs.copyFileSync(hostJavaw, imageJavaw);
+  return imageJavaw;
+}
+
 // jlink 只构建当前 OS/CPU 的运行时；安装包与 Java 运行时必须在同一原生 runner 构建。
 function buildRuntime() {
   const javaHome = process.env.JAVA_HOME;
@@ -59,6 +72,16 @@ function buildRuntime() {
       throw new Error(`JDK 架构 ${javaArch} 与 Node/应用架构 ${process.arch} 不一致`);
     const javaMajor = Number(/^JAVA_VERSION="(\d+)/m.exec(release)?.[1]);
     if (javaMajor !== 21) throw new Error("安装包必须使用 Java 21 运行时");
+    if (process.platform === "win32") {
+      const javaw = ensureWindowsJavaw(image, javaHome);
+      const javawProbe = spawnSync(javaw, ["-XshowSettings:properties", "-version"], {
+        encoding: "utf8",
+      });
+      if (javawProbe.error || javawProbe.status !== 0)
+        throw new Error(
+          "随包 javaw 无法启动；Windows 安装包必须用无控制台启动器才能保留 Core 诊断",
+        );
+    }
     // legal/ 与 release 一并保留，方便许可证审查和构建来源追踪。
     fs.writeFileSync(
       path.join(image, "leximeet-runtime.json"),
@@ -90,4 +113,4 @@ if (require.main === module) {
     process.exitCode = 1;
   }
 }
-module.exports = { buildRuntime };
+module.exports = { buildRuntime, ensureWindowsJavaw };

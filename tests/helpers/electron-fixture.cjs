@@ -1,16 +1,15 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { execFile } = require("node:child_process");
-const { promisify } = require("node:util");
 const { test: base, expect } = require("@playwright/test");
 const { _electron } = require("playwright");
 const { backgroundEnvironment } = require("./background-environment.cjs");
 const { startFocusMonitor } = require("./macos-focus-monitor.cjs");
 const { createBusinessClock } = require("./business-clock.cjs");
+const { signalTree, treeAlive } = require("../../electron/services/platform/process-tree.cjs");
+const { coreStartTimeoutMs } = require("../../electron/services/java-runtime.cjs");
 
 const root = path.resolve(__dirname, "../..");
-const execFileAsync = promisify(execFile);
 
 // 有界等待不占用事件循环；定时器会在任务提前完成时清理。
 async function bounded(promise, milliseconds, message) {
@@ -27,38 +26,20 @@ async function bounded(promise, milliseconds, message) {
   }
 }
 
-// Playwright 在 POSIX 创建独立进程组；兜底仅结束本例启动的树，不按名称扫描用户进程。
+// 兜底仅结束本例启动的树；Windows 用 taskkill /T，POSIX 用进程组或子 PID。不按名称扫描用户进程。
 async function forceOwnedProcess(child) {
   if (!child?.pid) return;
-  if (process.platform === "win32") {
-    if (child.exitCode !== null || child.signalCode !== null) return;
-    await execFileAsync("taskkill", ["/PID", String(child.pid), "/T", "/F"], {
-      timeout: 10000,
-      windowsHide: true,
-    });
-  } else {
-    try {
-      process.kill(-child.pid, "SIGKILL");
-    } catch (error) {
-      if (error.code !== "ESRCH") throw error;
-    }
-  }
+  signalTree(child.pid, "SIGKILL");
 }
 
-// 主进程已经退出时，POSIX 的进程组仍能标识本例遗留的 Java / renderer。
+// 主进程已经退出时，仍核验本例子进程树（Linux 进程组 / Windows taskkill 后的 PID / macOS 子进程）。
 async function assertOwnedGroupExited(child) {
-  if (process.platform === "win32" || !child?.pid) return;
+  if (!child?.pid) return;
   const deadline = Date.now() + 2000;
-  while (true) {
-    try {
-      process.kill(-child.pid, 0);
-    } catch (error) {
-      if (error.code === "ESRCH") return;
-      throw error;
-    }
+  while (treeAlive(child.pid)) {
     if (Date.now() >= deadline) {
       await forceOwnedProcess(child);
-      throw new Error("Electron 退出后本例进程组仍有残留；已强制清理，生命周期验收失败。");
+      throw new Error("Electron 退出后本例子进程仍有残留；已强制清理，生命周期验收失败。");
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
@@ -152,8 +133,11 @@ function createDesktopFactory(testInfo) {
         process.platform === "win32" ? "java.exe" : "java",
       );
     }
-    // 覆盖 Main 的 45s 冷启动期限和词典装配；不靠自动重试掩盖失败。
-    const launchTimeout = Number(extraEnv.LEXIMEET_TEST_SEED_INDEX) > 0 ? 120000 : 60000;
+    // 覆盖 Main 的平台握手期限和词典装配；不靠自动重试掩盖失败。
+    const launchTimeout =
+      Number(extraEnv.LEXIMEET_TEST_SEED_INDEX) > 0
+        ? Math.max(120000, coreStartTimeoutMs() + 15000)
+        : Math.max(60000, coreStartTimeoutMs() + 15000);
     let app;
     let child;
     let session;
@@ -231,13 +215,26 @@ function createDesktopFactory(testInfo) {
         .windows()
         .find((candidate) => /\/frontend\/dist\/index\.html(?:$|[?#])/.test(candidate.url()));
       session.page = page;
-      session.mainWindowId = await app.evaluate(({ BrowserWindow }, url) => {
-        const windows = BrowserWindow.getAllWindows().filter(
-          (window) => window.webContents.getURL() === url,
-        );
-        if (windows.length !== 1) throw new Error("无法唯一绑定当前业务主窗口");
-        return windows[0].id;
-      }, page.url());
+      const pageUrl = page.url();
+      await expect
+        .poll(
+          async () => {
+            session.mainWindowId = await app.evaluate(({ BrowserWindow }, url) => {
+              const normalize = (value) =>
+                String(value || "")
+                  .replace(/\\/g, "/")
+                  .split(/[?#]/)[0];
+              const wanted = normalize(url);
+              const windows = BrowserWindow.getAllWindows().filter(
+                (window) => normalize(window.webContents.getURL()) === wanted,
+              );
+              return windows.length === 1 ? windows[0].id : 0;
+            }, pageUrl);
+            return session.mainWindowId;
+          },
+          { timeout: 5000 },
+        )
+        .toBeGreaterThan(0);
       page.setDefaultTimeout(15000);
       if (skipSnapshot) {
         await page.waitForFunction(

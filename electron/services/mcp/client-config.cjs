@@ -4,10 +4,13 @@ const path = require("node:path");
 const os = require("node:os");
 const { randomBytes } = require("node:crypto");
 const { spawnSync } = require("node:child_process");
+const { quoteForShell } = require("../platform/shell-quote.cjs");
+const { ensureLauncher, mcpLauncherPath } = require("../platform/launcher.cjs");
+const { resolveClientBinary, commandOnPath } = require("../platform/process-names.cjs");
 
 const SERVER_NAME = "leximeet";
 const CLIENTS = Object.freeze(["cursor", "codex", "claude-code"]);
-const quote = (text) => `'${String(text).replaceAll("'", `'\\''`)}'`;
+const quote = (text, platform = process.platform) => quoteForShell(text, platform);
 
 function homeOf(homeDir = os.homedir()) {
   if (!path.isAbsolute(homeDir || "")) throw new Error("HOME_MUST_BE_ABSOLUTE");
@@ -23,45 +26,23 @@ function paths(homeDir) {
   };
 }
 
-function launcherPath(homeDir = os.homedir()) {
-  const home = homeOf(homeDir);
-  if (process.platform === "darwin")
-    return path.join(home, "Library/Application Support/LexiMeet/mcp/leximeet-mcp");
-  return path.join(home, ".config/LexiMeet/mcp/leximeet-mcp");
+function launcherPath(homeDir = os.homedir(), platform = process.platform) {
+  return mcpLauncherPath({ homeDir: homeOf(homeDir), platform });
 }
 
-function commandOnPath(name, env = process.env) {
-  const pathValue = env.PATH || "";
-  for (const dir of pathValue.split(path.delimiter)) {
-    if (!dir) continue;
-    const file = path.join(dir, name);
-    if (fs.existsSync(file)) return file;
-  }
-  return "";
-}
-
-// 仿 Native Host：客户端只执行本脚本，由脚本导出 ELECTRON_RUN_AS_NODE 再 exec Electron。
-function ensureLauncher({ homeDir, electronExecutable, shimPath }) {
-  if (!path.isAbsolute(electronExecutable || "") || !path.isAbsolute(shimPath || ""))
-    throw new Error("MCP_LAUNCH_PATHS_MUST_BE_ABSOLUTE");
-  const file = launcherPath(homeDir);
-  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-  const text = [
-    "#!/bin/sh",
-    "# 词遇管理的 MCP 转发：随包 Electron 的 Node 模式，无需系统 Node/JDK。",
-    "unset NODE_OPTIONS NODE_PATH ELECTRON_NO_ASAR ELECTRON_ENABLE_LOGGING ELECTRON_LOG_FILE",
-    "export ELECTRON_RUN_AS_NODE=1",
-    `exec ${quote(electronExecutable)} ${quote(shimPath)} "$@"`,
-    "",
-  ].join("\n");
-  fs.writeFileSync(file, text, { mode: 0o700 });
-  fs.chmodSync(file, 0o700);
-  return file;
-}
-
-function launchConfig(electronExecutable, shimPath, homeDir) {
+function launchConfig(electronExecutable, shimPath, homeDir, options = {}) {
   return {
-    command: ensureLauncher({ homeDir, electronExecutable, shimPath }),
+    command: ensureLauncher({
+      homeDir,
+      electronExecutable,
+      shimPath,
+      platform: options.platform || process.platform,
+      stubPath: options.stubPath,
+      resourcesPath: options.resourcesPath,
+      projectDir: options.projectDir,
+      env: options.env,
+      appData: options.appData,
+    }),
     args: [],
   };
 }
@@ -284,8 +265,21 @@ function leximeetTomlText(source) {
   return ranges.map(([from, to]) => lines.slice(from, to).join("\n")).join("\n");
 }
 
+function unescapeTomlBasic(text) {
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === "\\" && i + 1 < text.length) {
+      out += text[++i];
+      continue;
+    }
+    out += text[i];
+  }
+  return out;
+}
+
 function extractTomlCommand(body) {
-  return /(?:^|\n)\s*command\s*=\s*"([^"]+)"/.exec(body)?.[1] || "";
+  const match = /(?:^|\n)\s*command\s*=\s*"((?:\\.|[^"\\])*)"/.exec(body);
+  return match ? unescapeTomlBasic(match[1]) : "";
 }
 
 function codexTableMatches(body, launch) {
@@ -351,10 +345,10 @@ function removeClaude(file) {
   });
 }
 
-function inspectClient(id, { homeDir, electronExecutable, shimPath, env = process.env }) {
+function inspectClient(id, options = {}) {
+  const { homeDir, electronExecutable, shimPath, env = process.env } = options;
   const file = paths(homeDir)[id];
-  const binaries = { cursor: "cursor", codex: "codex", "claude-code": "claude" };
-  const installed = fs.existsSync(path.dirname(file)) || Boolean(commandOnPath(binaries[id], env));
+  const installed = fs.existsSync(path.dirname(file)) || Boolean(resolveClientBinary(id, { env }));
   let connected = false;
   let broken = false;
   let launch = null;
@@ -381,7 +375,9 @@ function inspectClient(id, { homeDir, electronExecutable, shimPath, env = proces
   else if (connected) status = "connected";
   else if (installed) status = "available";
   const desired =
-    electronExecutable && shimPath ? launchConfig(electronExecutable, shimPath, homeDir) : null;
+    electronExecutable && shimPath
+      ? launchConfig(electronExecutable, shimPath, homeDir, options)
+      : null;
   return {
     id,
     status,
@@ -390,7 +386,7 @@ function inspectClient(id, { homeDir, electronExecutable, shimPath, env = proces
     broken,
     file,
     deeplink: id === "cursor" && desired ? cursorDeeplink(desired) : "",
-    copyCommand: desired ? copyCommand(id, desired) : "",
+    copyCommand: desired ? copyCommand(id, desired, process.platform) : "",
   };
 }
 
@@ -402,11 +398,12 @@ function cursorDeeplink(launch) {
   return `cursor://anysphere.cursor-deeplink/mcp/install?name=${encodeURIComponent(SERVER_NAME)}&config=${encodeURIComponent(config)}`;
 }
 
-function copyCommand(id, launch) {
+function copyCommand(id, launch, platform = process.platform) {
   if (!launch?.command) return "";
-  if (id === "codex") return `codex mcp add ${SERVER_NAME} -- ${quote(launch.command)}`;
+  const q = (value) => quote(value, platform);
+  if (id === "codex") return `codex mcp add ${SERVER_NAME} -- ${q(launch.command)}`;
   if (id === "claude-code")
-    return `claude mcp add --scope user --transport stdio ${SERVER_NAME} -- ${quote(launch.command)}`;
+    return `claude mcp add --scope user --transport stdio ${SERVER_NAME} -- ${q(launch.command)}`;
   return cursorDeeplink(launch);
 }
 
@@ -416,7 +413,12 @@ function connectWithCli(cli, args, env) {
 
 function connect(id, options) {
   if (!CLIENTS.includes(id)) throw new Error("不支持的客户端");
-  const launch = launchConfig(options.electronExecutable, options.shimPath, options.homeDir);
+  const launch = launchConfig(
+    options.electronExecutable,
+    options.shimPath,
+    options.homeDir,
+    options,
+  );
   const file = paths(options.homeDir)[id];
   if (id === "cursor") {
     if (options.preferDeeplink && options.openExternal) {
@@ -426,7 +428,7 @@ function connect(id, options) {
     return { method: "file", ...writeCursor(file, launch), ...inspectClient(id, options) };
   }
   if (id === "codex") {
-    const cli = commandOnPath("codex", options.env);
+    const cli = resolveClientBinary("codex", { env: options.env });
     if (cli && options.preferCli !== false) {
       const result = connectWithCli(
         cli,
@@ -440,7 +442,7 @@ function connect(id, options) {
     }
     return { method: "file", ...writeCodex(file, launch), ...inspectClient(id, options) };
   }
-  const cli = commandOnPath("claude", options.env);
+  const cli = resolveClientBinary("claude-code", { env: options.env });
   if (cli && options.preferCli !== false) {
     const result = connectWithCli(
       cli,
@@ -484,4 +486,5 @@ module.exports = {
   findTomlTables,
   parseTomlHeader,
   leximeetTomlText,
+  extractTomlCommand,
 };

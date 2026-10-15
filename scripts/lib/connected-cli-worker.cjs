@@ -4,10 +4,15 @@ const path = require("node:path");
 const { Worker, isMainThread, parentPort, workerData } = require("node:worker_threads");
 const root = path.resolve(__dirname, "../..");
 const { connectedSessionRoot } = require("./connected-session-path.cjs");
+const {
+  pidAlive,
+  treeAlive,
+  signalTree,
+} = require("../../electron/services/platform/process-tree.cjs");
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const KIND = "leximeet.connected-cli/1";
 
-// Worker 意外退出只处理它已上报的唯一资料根、子进程组和本轮注册；永不按名称清理。
+// Worker 意外退出只处理它已上报的唯一资料根、子进程树和本轮注册；永不按名称清理。
 async function recoverOwnedSession(snapshot) {
   if (!snapshot) return;
   const { directory, profileRoot } = snapshot;
@@ -26,25 +31,17 @@ async function recoverOwnedSession(snapshot) {
       snapshot.browser?.pid,
     ].filter((pid) => Number.isInteger(pid) && pid > 1 && pid !== process.pid),
   );
-  const groupAlive = (pid) => {
-    try {
-      process.kill(-pid, 0);
-      return true;
-    } catch (error) {
-      if (error.code === "ESRCH") return false;
-      throw error;
-    }
-  };
+  const ownedAlive = (pid) => pidAlive(pid) || treeAlive(pid);
   for (const pid of pids) {
     try {
-      if (!groupAlive(pid)) continue;
-      process.kill(-pid, "SIGTERM");
+      if (!ownedAlive(pid)) continue;
+      signalTree(pid, "SIGTERM");
       const deadline = Date.now() + 5000;
-      while (groupAlive(pid) && Date.now() < deadline) await delay(50);
-      if (groupAlive(pid)) process.kill(-pid, "SIGKILL");
+      while (ownedAlive(pid) && Date.now() < deadline) await delay(50);
+      if (ownedAlive(pid)) signalTree(pid, "SIGKILL");
       const forceDeadline = Date.now() + 2000;
-      while (groupAlive(pid) && Date.now() < forceDeadline) await delay(50);
-      if (groupAlive(pid)) throw new Error(`本轮进程组 ${pid} 未退出`);
+      while (ownedAlive(pid) && Date.now() < forceDeadline) await delay(50);
+      if (ownedAlive(pid)) throw new Error(`本轮进程树 ${pid} 未退出`);
     } catch (error) {
       errors.push(error.message);
     }

@@ -12,7 +12,7 @@ bash scripts/test-background.sh
 
 也可使用 `npm run test:background`。脚本复用现有 Node.js 24+ / JDK 21 / Maven 3.9 的隔离环境准备，并将测试进程优先级降低 10。Desktop 单元最多同时运行两个文件，Electron 串行运行；降低优先级不等于没有 CPU / 内存开销。
 
-`bash scripts/test-desktop.sh --verify` 与 `npm run verify:desktop` 保留为兼容入口。直接使用 npm 时须先准备 JDK 21。`test:desktop` 单独运行当前 Electron 用例，`test:package:desktop` 验证本平台的实际应用包。
+`bash scripts/test-desktop.sh --verify` 与 `npm run verify:desktop` 保留为兼容入口。直接使用 npm 时须先准备 JDK 21。`test:desktop` 单独运行当前 Electron 用例，`test:package:desktop` 验证本平台的实际应用包，并在 Playwright globalSetup 中自行准备锁定的 Full 测试源，不依赖 verify 分片的工作目录。
 
 七天连续使用另有后台入口 `bash scripts/test-desktop.sh --journey`：首启、普通/教学练习回归、七天、明暗视觉分别报告；日期由 test profile 内的业务时钟文件推进，不改变系统时间。两份不同版本真实应用的升级专项使用 `--journey --upgrade 旧可执行文件 新可执行文件`。完整说明见[日常使用与升级测试](日常使用与升级测试.md)。
 
@@ -47,6 +47,8 @@ macOS 需要 Xcode Command Line Tools 的 `xcrun swiftc` 编译只读工具；�
 
 Windows / Linux 仍使用隐藏窗口、静音、受控输入和资源隔离，但本轮没有实现这些平台的系统前台应用监测；报告明确标记 `supported: false`，不冒称完成 macOS 同等验收。
 
+隔离会话回收在 POSIX 上拒绝组/其他可访问的目录；在 Windows 上改为检查 NTFS DACL，出现 Everyone、`BUILTIN\Users` 或 Authenticated Users 即保留资料。结束本轮进程时 Linux 向独立进程组发信号，Windows 使用 `taskkill /PID /T`，macOS 结束记录的 PID 及其子进程；单元测试在各平台生成真实子进程树，断言停止后子孙 PID 不存在。父进程先退出后的进程组回收仍只在 Linux 验证。
+
 ## 查看报告与验收边界
 
 当前桌面报告：`playwright-report/desktop-001`；实际应用包报告：`playwright-report/desktop-001-package`。每个启动会话附加：
@@ -63,14 +65,14 @@ Windows / Linux 仍使用隐藏窗口、静音、受控输入和资源隔离，�
 
 ## 持续集成门禁
 
-| 工作流             | 范围                                                                                            |
-| ------------------ | ----------------------------------------------------------------------------------------------- |
-| ci.yml             | macOS arm64：格式/文档/契约、单元、Core、真实 HTTP/Host、隐藏原生 UI、七天链路、真实包          |
-| lmcp-workspace.yml | 固定 Browser 引用和 Core gitlink；生产扩展通过真实 Native Host 连接源码与打包 Desktop           |
-| visual.yml         | 手动运行当前真实原生使用链路及明暗/窄窗截图，供人工审查；不宣称像素比较通过                     |
-| candidate.yml      | 人工候选或正式标签：完整门禁、构建/安装验证、对应源码；标签通过后公开 Release；可信旧包另验升级 |
+| 工作流             | 范围                                                                                                                                                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ci.yml             | lint（5 分钟，不阻塞其它作业）；macOS 三分片并行（verify / 七日旅程 / 打包）；Windows 与 Ubuntu 的 core-cross 与打包分开；install-smoke 只 `needs` 对应平台打包产物。`concurrency` 按 workflow+ref，仅取消 PR/分支进行中的 run |
+| lmcp-workspace.yml | 固定 Browser 引用和 Core gitlink；生产扩展通过真实 Native Host 连接源码与打包 Desktop；Linux 可无头联调，Windows 插件仍人工                                                                                                    |
+| visual.yml         | 手动运行当前真实原生使用链路及明暗/窄窗截图，供人工审查；不宣称像素比较通过                                                                                                                                                    |
+| candidate.yml      | 三端矩阵构建全部安装包（mac dmg/zip、win nsis、linux AppImage+deb），真实安装验证与对应源码；三端齐套后合并 feed / SHA256SUMS 再公开 Release                                                                                   |
 
-`ci.yml` 整体作业预算为 60 分钟，给全新 runner 的依赖准备、完整 UI、七天链路和随包验证留出时间。业务请求的 15 秒预算、单例断言和零重试策略保持不变；作业预算不代表实测耗时或远端检查已经通过。
+`ci.yml` 作业预算：lint 5 分钟，macOS verify 30 分钟（`test:desktop` 门禁 900 秒，约 1.5 倍实测），macOS journey / package 与 Ubuntu 各 25 分钟，Windows core-cross 20 分钟，install-smoke 10 分钟。Linux / Windows 安装冒烟不再等待 macOS；对应平台打包失败则该平台 smoke 跳过，不下载空产物。启用 npm、Maven、`.runtime/electron-cache`、electron-builder 与 `.runtime/dictionary-source` 缓存。Windows **core-cross** 在单元/Core 测试前把工作区、TEMP 与 `java.exe`/`javaw.exe` 加入 Defender 排除，并把 `TEMP`/`TMP` 指到工作区内的 `.runtime/ci-tmp`，随即按当前用户收紧该目录 ACL；不注入 `JAVA_TOOL_OPTIONS`。不修改 Core 的 15 秒产品预算。**install-smoke 的 Windows 任务先打开 Defender 实时保护再确认**，不排除工作区或安装目录；启动 Electron 时只加 `--disable-gpu`（保留软件光栅），后台测试关闭硬件加速，`showErrorBox` 只记录并把原始错误写到 stderr。LMCP / MCP `start` 失败同样写 stderr；冒烟失败时打印 `logs/`。隔离资料先创建 `AppData\\Roaming` 与 `Local`，避免 `getPath('appData')` 失败。应用中途退出则冒烟立即失败。产品侧 Desktop 等待 Core 握手：POSIX 45 秒，Windows 120 秒。Windows 启动 Core 用 `java.exe` + 隐藏窗口（不用会脱离父进程的 `javaw`），父进程立刻关掉 stderr 文件句柄；失败分类在 exit 后再读 stderr 文件；`stop` 在 Windows 立刻 `taskkill /T`，POSIX 先 SIGTERM、2.5 秒后再 SIGKILL，成功占住目录的实例才按 `--data-dir` 命令行回收仍持锁的 JVM，启动失败（如 `DATA_IN_USE`）只按 `-Dleximeet.instance` 回收以免误杀持锁原进程。门禁脚本超时后打印带父进程 PID 的进程树；`test:lmcp:transport` 预算 420 秒（Windows 上每例 Restrict 约 2 秒）。`test:mcp` 在 Windows 上按 PE stub 与 `.launch` 断言启动器；陈旧 UDS 夹具只在 POSIX 运行。词典准备下载失败会重试，缓存 `.runtime/dictionary-source`，不回退本机 7897 / 12334 代理。`icacls` / `reg.exe` / `whoami.exe` / `taskkill.exe` 使用 `System32\\<名字>.exe`；`powershell.exe` 使用 `System32\\WindowsPowerShell\\v1.0\\powershell.exe`。不给测试补 PATH。命名管道 Win32 ACL 用 `SE_FILE_OBJECT` 收紧 `\\\\.\\pipe\\<名>`，失败则关闭监听并启动失败，回读 DACL 只允许当前用户与 SYSTEM（SDDL 可能把管理员 RID 500 写成 `LA`）。LMCP 接受新连接与查询状态时清掉已销毁或半开仍占槽的套接字。Windows 冷启动探测 Maven/JDK 超时 30 秒并重试，失败时打印 `mvn -version` 原文。业务请求的 15 秒预算、单例断言和零重试策略保持不变；作业预算不代表实测耗时或远端检查已经通过。
 
 Core 子模块单元测试在临时空仓中让 Git 解析相对来源，覆盖 GitHub / Gitee 的 HTTPS 与 SSH 地址；随后从本地 Core 检出固定 gitlink 并核对源码。解析检查不访问网络，也不改开发者的远端或全局配置；远端是否能取得该提交仍由实际递归检出验证。
 
@@ -116,7 +118,7 @@ Actions 固定到完整 SHA，检查和构建任务使用只读凭据，只有�
 
 2026-10-05 本机复验已通过 Core 174 项/40 套、真实 Core 管理器 9 项、参考 Native Host 传输 47 项、原生 Electron UI 56 项、七天使用 7 项，均零失败、零跳过、零自动重试。Desktop 单元与物料边界检查共 326 项。生产依赖审计为零已知漏洞；完整构建依赖的一项已知问题及约束见[安全与许可](安全与许可.md)。最终应用包的来源、字节数、SHA-256、实际安装和隔离回收结果由 `release:local` 生成的 `BUILD-MANIFEST.json` 与报告记录，不能把上方旧包的字节数视为本次产物。
 
-Browser 已纳入首次正式发布准备。参考 Native Host 传输与本机 UI 验证只证明 Desktop 的对应能力；每次冻结新的公开源码组合后，必须分别重跑真实生产扩展的源码与随包双端验收，保存实际源码 SHA、规范摘要、扩展文件指纹和结果。发布附件以对应轮次的清单为准，不把此前通过记录改名为新提交的证据。远端 Actions、Developer ID、公证、其他平台与系统可见通知仍需分别验收。
+Browser 已纳入首次正式发布准备。参考 Native Host 传输与本机 UI 验证只证明 Desktop 的对应能力；每次冻结新的公开源码组合后，必须分别重跑真实生产扩展的源码与随包双端验收，保存实际源码 SHA、规范摘要、扩展文件指纹和结果。发布附件以对应轮次的清单为准，不把此前通过记录改名为新提交的证据。远端 Actions、Developer ID、公证、Windows SmartScreen、Linux 各桌面环境通知/托盘与系统可见通知仍需分别验收。1.0.2 的跨平台自动化覆盖契约、单元、Core、本机传输、MCP SDK 与安装冒烟；七天旅程与真实 Chrome/Edge 插件仍以 macOS 为主。
 
 正确选择专项会逐帧观察 DOM 和数据库：从反馈到换题至少一秒，期间保持题卡内容和位置，每词只写入一条事实。故障专项暂停测试自身的 Core，重启后按原提交身份恢复，不能以新 ID 重复计分。日常用例暂停首次列表、临摹、听音或选义草稿 IPC，核对等待期间操作禁用、真实保存后自动恢复及教学首击继续；不增加固定等待、不跳过，也不自动重试。
 

@@ -4,8 +4,17 @@ const crypto = require("node:crypto");
 const root = path.resolve(__dirname, "..");
 const { resolvePackageOutput } = require("./lib/package-output.cjs");
 
+function installerPattern(kind, platform = process.platform) {
+  if (kind === "deb") return /\.deb$/;
+  if (kind === "AppImage" || kind === "appimage") return /\.AppImage$/;
+  if (kind === "exe") return /\.exe$/;
+  if (kind === "dmg") return /\.dmg$/;
+  if (kind === "zip") return /\.zip$/;
+  return { darwin: /\.dmg$/, win32: /\.exe$/, linux: /\.AppImage$/ }[platform] || /\.AppImage$/;
+}
+
 // 对固定构建结构做严格查找，多个候选视为歧义，避免误测旧安装包。
-function findArtifact(kind, directory = resolvePackageOutput(root)) {
+function findArtifact(kind, directory = resolvePackageOutput(root), installerKind) {
   const matches = [];
   function visit(dir, depth = 0) {
     if (!fs.existsSync(dir) || depth > 4) return;
@@ -30,12 +39,7 @@ function findArtifact(kind, directory = resolvePackageOutput(root)) {
       if (
         kind === "installer" &&
         entry.isFile() &&
-        (process.platform === "darwin"
-          ? /\.dmg$/
-          : process.platform === "win32"
-            ? /\.exe$/
-            : /\.AppImage$/
-        ).test(entry.name)
+        installerPattern(installerKind).test(entry.name)
       )
         matches.push(filename);
       // installer 只查分发文件，不把 unpacked 目录内的应用或卸载器误认成安装器。
@@ -54,7 +58,7 @@ function findArtifact(kind, directory = resolvePackageOutput(root)) {
 async function checksums(directory) {
   const names = fs
     .readdirSync(directory)
-    .filter((name) => /\.(?:dmg|zip|exe|AppImage|tar\.gz)$/.test(name))
+    .filter((name) => /\.(?:dmg|zip|exe|AppImage|deb|tar\.gz)$/.test(name))
     .sort();
   if (!names.length) throw new Error("没有可计算校验和的分发产物");
   const lines = [];
@@ -107,11 +111,17 @@ if (require.main === module) {
       }
       if (!["find-executable", "find-installer"].includes(command))
         throw new Error("支持 find-executable / find-installer / checksums / inventory");
-      console.log(findArtifact(command.slice(5), process.argv[3] && path.resolve(process.argv[3])));
+      console.log(
+        findArtifact(
+          command.slice(5),
+          process.argv[3] && path.resolve(process.argv[3]),
+          process.argv[4],
+        ),
+      );
     })
     .catch((error) => {
       console.error(error.message);
       process.exitCode = 1;
     });
 }
-module.exports = { findArtifact, checksums, contentInventory };
+module.exports = { findArtifact, checksums, contentInventory, installerPattern };

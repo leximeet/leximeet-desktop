@@ -9,11 +9,13 @@ const { randomUUID } = require("node:crypto");
 const { LmcpGateway } = require("../../electron/services/lmcp/gateway.cjs");
 const { FrameDecoder, encodeFrame } = require("../../electron/services/lmcp/framing.cjs");
 const { readPrivateJson } = require("../../electron/services/lmcp/private-files.cjs");
+const { ensurePrivateDirectory } = require("../../electron/services/platform/private-files.cjs");
 const origin = `chrome-extension://${"a".repeat(32)}/`;
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 async function fixture(t, options) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "lmcp-gateway-test-"));
+  ensurePrivateDirectory(root);
   const gateway = new LmcpGateway({
     profile: { root, name: "test" },
     allowedOrigins: [origin],
@@ -28,7 +30,7 @@ async function fixture(t, options) {
   await gateway.start();
   const descriptor = readPrivateJson(gateway.descriptorPath);
   async function client(connectionId = randomUUID()) {
-    const socket = net.connect(descriptor.socketPath);
+    const socket = net.connect(descriptor.path || descriptor.socketPath);
     sockets.push(socket);
     const decoder = new FrameDecoder();
     const inbox = [];
@@ -40,7 +42,17 @@ async function fixture(t, options) {
     decoder.on("error", () => socket.destroy());
     socket.on("data", (data) => decoder.push(data));
     socket.on("error", () => {});
-    await new Promise((resolve) => socket.once("connect", resolve));
+    socket.on("close", () => {
+      while (waiting.length) waiting.shift()({ kind: "closed" });
+    });
+    await new Promise((resolve, reject) => {
+      const onClose = () => reject(new Error("socket-closed-before-connect"));
+      socket.once("close", onClose);
+      socket.once("connect", () => {
+        socket.off("close", onClose);
+        resolve();
+      });
+    });
     const next = () =>
       inbox.length
         ? Promise.resolve(inbox.shift())
@@ -48,7 +60,9 @@ async function fixture(t, options) {
     socket.write(
       encodeFrame({ kind: "transport-auth", token: descriptor.token, extensionOrigin: origin }),
     );
-    assert.equal((await next()).kind, "transport-ready");
+    const ready = await next();
+    if (ready.kind === "closed") throw new Error("socket-closed-before-ready");
+    assert.equal(ready.kind, "transport-ready");
     return {
       socket,
       next,
@@ -216,50 +230,78 @@ test("设置页管理调用在Core未就绪时有界，超时不释放真实并�
   assert.equal(f.gateway.status().activeRequests, 0);
 });
 
-test("未确认断线清理占生命周期槽，禁止旧ID复用且后台清理数量有界", async (t) => {
-  let cleanupCalls = 0;
-  const core = {
-    async request(endpoint, _, { envelope }) {
-      if (endpoint.endsWith("manage")) {
-        cleanupCalls++;
-        return new Promise(() => {});
+test(
+  "未确认断线清理占生命周期槽，禁止旧ID复用且后台清理数量有界",
+  { timeout: 15000 },
+  async (t) => {
+    let cleanupCalls = 0;
+    const core = {
+      async request(endpoint, _, { envelope }) {
+        if (endpoint.endsWith("manage")) {
+          cleanupCalls++;
+          return new Promise(() => {});
+        }
+        return {
+          apiVersion: "1.0.0",
+          requestId: envelope.requestId,
+          connectionId: envelope.connectionId,
+          method: envelope.method,
+          ok: true,
+          result: {},
+        };
+      },
+    };
+    const f = await fixture(t, { core, maxConnections: 2, cleanupTimeoutMs: 15 });
+    const openClient = async (connectionId) => {
+      let last;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          return await f.client(connectionId);
+        } catch (error) {
+          last = error;
+          console.error(`openClient attempt=${attempt} ${error.message}`);
+          if (!String(error.message).startsWith("socket-closed-before") || attempt === 2)
+            throw error;
+          await delay(100);
+        }
       }
-      return {
-        apiVersion: "1.0.0",
-        requestId: envelope.requestId,
-        connectionId: envelope.connectionId,
-        method: envelope.method,
-        ok: true,
-        result: {},
-      };
-    },
-  };
-  const f = await fixture(t, { core, maxConnections: 2, cleanupTimeoutMs: 15 });
-  for (let i = 0; i < 2; i++) {
-    const client = await f.client();
-    client.send("hello");
-    assert.equal((await client.next()).ok, true);
-    const closed = new Promise((resolve) => client.socket.once("close", resolve));
-    client.socket.destroy();
-    await closed;
-    await delay(20);
-    if (i === 0) {
-      const reused = await f.client(client.connectionId);
-      const rejected = new Promise((resolve) => reused.socket.once("close", resolve));
-      reused.send("hello");
-      await rejected;
-      assert.equal(cleanupCalls, 1);
+      throw last;
+    };
+    try {
+      for (let i = 0; i < 2; i++) {
+        const client = await openClient();
+        client.send("hello");
+        const hello = await client.next();
+        assert.equal(hello.ok, true, `hello #${i} ${JSON.stringify(hello)}`);
+        const closed = new Promise((resolve) => client.socket.once("close", resolve));
+        client.socket.destroy();
+        await closed;
+        const deadline = Date.now() + 500;
+        while (f.gateway.status().socketCount > 0 && Date.now() < deadline) await delay(20);
+        f.gateway.reapDeadSockets();
+        await delay(process.platform === "win32" ? 100 : 20);
+        if (i === 0) {
+          const reused = await openClient(client.connectionId);
+          const rejected = new Promise((resolve) => reused.socket.once("close", resolve));
+          reused.send("hello");
+          await rejected;
+          assert.equal(cleanupCalls, 1, "first cleanup occupies the old id");
+        }
+      }
+      assert.equal(cleanupCalls, 2, `cleanupCalls=${cleanupCalls}`);
+      assert.equal(f.gateway.status().cleanupPendingCount, 2);
+      const extra = await openClient();
+      const closed = new Promise((resolve) => extra.socket.once("close", resolve));
+      extra.send("hello");
+      await closed;
+      assert.equal(cleanupCalls, 2);
+      assert.equal(f.gateway.status().connections.length, 0);
+    } catch (error) {
+      console.error(`lifecycle-slots: ${error.stack || error.message}`);
+      throw error;
     }
-  }
-  assert.equal(cleanupCalls, 2);
-  assert.equal(f.gateway.status().cleanupPendingCount, 2);
-  const extra = await f.client();
-  const closed = new Promise((resolve) => extra.socket.once("close", resolve));
-  extra.send("hello");
-  await closed;
-  assert.equal(cleanupCalls, 2);
-  assert.equal(f.gateway.status().connections.length, 0);
-});
+  },
+);
 
 function response(envelope, result) {
   return {

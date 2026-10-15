@@ -39,6 +39,7 @@ async function main() {
   buildRuntime();
   require("./lmcp/build-host.cjs").buildNativeHost();
   require("./mcp/build-host.cjs").buildMcpHost();
+  require("./build-run-as-node.cjs").build({ required: process.platform === "win32" });
   const platform = Platform.current();
   const target =
     mode === "dir"
@@ -47,7 +48,7 @@ async function main() {
         ? ["dmg", "zip"]
         : process.platform === "win32"
           ? ["nsis"]
-          : ["AppImage"];
+          : ["AppImage", "deb"];
   // 通过 API 固定当前架构，避免 ARM 主机把自身 JRE 塞进 x64 安装包。
   await build({
     projectDir: root,

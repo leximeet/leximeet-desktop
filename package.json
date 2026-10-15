@@ -1,10 +1,15 @@
 {
   "name": "leximeet-desktop",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "词遇-LexiMeet：在语境里遇见，在记忆里重逢。",
   "private": true,
   "license": "AGPL-3.0-only",
   "author": "LexiMeet contributors",
+  "homepage": "https://github.com/leximeet/leximeet-desktop",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/leximeet/leximeet-desktop.git"
+  },
   "main": "electron/main.js",
   "engines": {
     "node": ">=24.0.0"
@@ -19,14 +24,14 @@
     "build:frontend": "vite build --config frontend/vite.config.mjs",
     "build:core": "node scripts/java.cjs package",
     "build": "npm run prepare:dictionary && npm run build:frontend && npm run build:core",
-    "test:unit": "node --test --test-concurrency=2 tests/unit/*.test.cjs frontend/tests/*.test.mjs",
+    "test:unit": "node --test --test-concurrency=2 --test-timeout=120000 tests/unit/*.test.cjs frontend/tests/*.test.mjs",
     "test:core": "node scripts/java.cjs test",
     "test:e2e": "npm run test:desktop",
     "test:package": "npm run test:package:desktop",
     "test": "npm run test:unit && npm run test:core",
     "verify": "npm run verify:desktop",
     "package:dir": "npm run build && node scripts/package.cjs dir",
-    "test:integration": "node --test --test-concurrency=1 tests/e2e/core-runtime.test.cjs",
+    "test:integration": "node --test --test-concurrency=1 --test-timeout=120000 tests/e2e/core-runtime.test.cjs",
     "test:ui": "npm run test:desktop",
     "test:visual": "playwright test --config playwright.desktop.config.cjs tests/desktop001/practice-usage-capture.spec.cjs",
     "test:upgrade": "node scripts/test-desktop.cjs upgrade",
@@ -51,8 +56,11 @@
     "test:journey": "node scripts/test-daily-journey.cjs",
     "test:desktop": "playwright test --config playwright.desktop.config.cjs",
     "test:package:desktop": "playwright test --config playwright.desktop-package.config.cjs",
-    "test:lmcp:transport": "node --test --test-concurrency=1 tests/lmcp/transport-*.test.cjs",
-    "test:mcp": "node --test --test-concurrency=1 tests/mcp/*.test.cjs",
+    "test:lmcp:transport": "node --test --test-concurrency=1 --test-timeout=120000 tests/lmcp/transport-*.test.cjs",
+    "test:mcp": "node --test --test-concurrency=1 --test-timeout=120000 tests/mcp/*.test.cjs",
+    "test:install-smoke": "node scripts/install-smoke.cjs",
+    "verify:cross": "node scripts/verify-cross.cjs",
+    "build:stub": "node scripts/build-run-as-node.cjs",
     "verify:lmcp:contract": "node scripts/lmcp/verify-contract.cjs",
     "verify:mcp:contract": "node scripts/mcp/verify-contract.cjs",
     "build:mcp-host": "node scripts/mcp/build-host.cjs",
@@ -164,13 +172,28 @@
     },
     "win": {
       "icon": "resources/brand/LexiMeet.ico",
-      "target": "nsis"
+      "target": "nsis",
+      "extraResources": [
+        {
+          "from": ".runtime/native/leximeet-run-as-node.exe",
+          "to": "native/leximeet-run-as-node.exe"
+        }
+      ]
     },
     "linux": {
       "icon": "resources/brand/icon-512x512.png",
-      "target": "AppImage",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "Education",
-      "executableName": "leximeet"
+      "executableName": "leximeet",
+      "maintainer": "LexiMeet contributors <leximeet@users.noreply.github.com>"
+    },
+    "deb": {
+      "packageName": "leximeet",
+      "afterInstall": null,
+      "afterRemove": null
     },
     "nsis": {
       "oneClick": false,

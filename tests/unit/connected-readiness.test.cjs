@@ -613,22 +613,27 @@ test("Worker 清理失败或确认后崩溃必须失败，不能因ACK伪报退�
   }
 });
 
-test("Worker 意外退出按实际上报的自有进程组收尾，保留资料且不声称焦点验证完成", async (t) => {
+test("Worker 意外退出按实际上报的自有进程树收尾，保留资料且不声称焦点验证完成", async (t) => {
   const { randomUUID } = require("node:crypto");
+  const { ensurePrivateDirectory } = require("../../electron/services/platform/private-files.cjs");
+  const { pidAlive, signalTree } = require("../../electron/services/platform/process-tree.cjs");
   const directory = path.join(connectedSessionRoot(), randomUUID()),
     profileRoot = path.join(directory, "desktop");
-  fs.mkdirSync(profileRoot, { recursive: true, mode: 0o700 });
-  // 主线程创建真实组，再由 Worker 上报并崩溃；测试工具沙箱保留自有信号许可。
-  // 生命周期交接与实际组清理都是真的，不把 kill 失败换成模拟成功。
+  ensurePrivateDirectory(connectedSessionRoot());
+  ensurePrivateDirectory(directory);
+  ensurePrivateDirectory(profileRoot);
+  // 主线程创建真实子进程，再由 Worker 上报并崩溃；测试工具沙箱保留自有信号许可。
+  // 生命周期交接与实际树清理都是真的，不把 kill 失败换成模拟成功。
   const child = spawn(process.execPath, ["-e", "setInterval(()=>{},1000)"], {
     detached: true,
     stdio: "ignore",
+    windowsHide: true,
   });
   t.after(() => {
     try {
-      process.kill(-child.pid, "SIGKILL");
+      signalTree(child.pid, "SIGKILL");
     } catch (error) {
-      if (error.code !== "ESRCH") throw error;
+      if (error.code !== "ESRCH" && error.code !== "EPERM") throw error;
     }
     fs.rmSync(directory, { recursive: true, force: true });
   });
@@ -652,10 +657,7 @@ test("Worker 意外退出按实际上报的自有进程组收尾，保留资料�
   assert.equal(record.focusComplete, false);
   assert.equal(record.dataRetained, true);
   assert.equal(record.pids.length, 1);
-  assert.throws(
-    () => process.kill(-record.pids[0], 0),
-    (error) => error.code === "ESRCH",
-  );
+  assert.equal(pidAlive(record.pids[0]), false);
   await assert.rejects(
     cli.recoverOwnedSession({
       directory: os.tmpdir(),
@@ -704,7 +706,8 @@ test("--help 不读 Browser、不准备、不启动", async () => {
 
 test("正常一键入口先构建，不要求先存在 Browser .output；只有 --check 只读门禁", async () => {
   let requested;
-  await launcher.main(["--fresh", "--extension", "/private/tmp/not-built-candidate"], {
+  const extensionDir = path.resolve(os.tmpdir(), "not-built-candidate");
+  await launcher.main(["--fresh", "--extension", extensionDir], {
     checkReadiness() {
       throw new Error("不应在构建前读取候选");
     },
@@ -712,9 +715,7 @@ test("正常一键入口先构建，不要求先存在 Browser .output；只有 
       requested = value;
     },
   });
-  assert.deepEqual(requested, {
-    extensionDir: "/private/tmp/not-built-candidate",
-  });
+  assert.deepEqual(requested, { extensionDir });
 });
 
 function child(pid = 456789) {
@@ -744,10 +745,10 @@ test("等待 descriptor 有限时、先退出立即失败，完全不读取 toke
   const dir = path.join(f.directory, "native-messaging");
   fs.mkdirSync(dir, { mode: 0o700 });
   const descriptor = path.join(dir, "lmcp-uds.json");
-  fs.writeFileSync(descriptor, "not JSON: token must never be read", {
-    mode: 0o600,
-  });
+  const { writePrivateJson } = require("../../electron/services/lmcp/private-files.cjs");
+  writePrivateJson(descriptor, { note: "token must never be read" });
   assert.equal(await launcher.waitDescriptor(f.directory, child()), descriptor);
+  if (process.platform === "win32") return;
   fs.chmodSync(descriptor, 0o644);
   await assert.rejects(launcher.waitDescriptor(f.directory, child()), /权限不安全/);
 });
@@ -848,7 +849,7 @@ test("登记投影等待有界，进程退出/取消立即失败，不能因已�
   );
 });
 
-test("Ctrl+C 清理只使用持有的子进程组，不按名称、不删除数据；重复停止幂等", async () => {
+test("Ctrl+C 清理只使用持有的子进程树，不按名称、不删除数据；重复停止幂等", async () => {
   const record = { processes: {} };
   const killed = [];
   let saved = 0;
@@ -868,13 +869,52 @@ test("Ctrl+C 清理只使用持有的子进程组，不按名称、不删除数�
   owned.add("desktop", c);
   await owned.stop("SIGINT");
   await owned.stop("SIGINT");
-  assert.deepEqual(killed, [[-c.pid, "SIGTERM"]]);
+  assert.deepEqual(killed, [[process.platform === "linux" ? -c.pid : c.pid, "SIGTERM"]]);
   assert.equal(record.stopReason, "SIGINT");
   assert.ok(record.exitedAt);
   assert.ok(saved >= 3);
 });
 
+test("停止后本轮子进程确实退出", async (t) => {
+  const { pidAlive, signalTree } = require("../../electron/services/platform/process-tree.cjs");
+  const script =
+    "const {spawn}=require('node:child_process');const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore',windowsHide:true});console.log(child.pid);setInterval(()=>{},1000);";
+  const parent = spawn(process.execPath, ["-e", script], {
+    detached: true,
+    stdio: ["ignore", "pipe", "ignore"],
+    windowsHide: true,
+  });
+  let output = "";
+  parent.stdout.on("data", (bytes) => {
+    output += bytes;
+  });
+  t.after(() => {
+    try {
+      signalTree(parent.pid, "SIGKILL");
+    } catch (error) {
+      if (error.code !== "ESRCH" && error.code !== "EPERM") throw error;
+    }
+  });
+  const deadline = Date.now() + 8000;
+  while (!/^\d+\s*$/.test(output) && Date.now() < deadline)
+    await new Promise((r) => setTimeout(r, 50));
+  const childPid = Number.parseInt(output.trim(), 10);
+  assert.equal(Number.isInteger(childPid) && childPid > 1, true);
+  assert.equal(pidAlive(parent.pid), true);
+  assert.equal(pidAlive(childPid), true);
+  const record = { processes: {} },
+    owned = new launcher.OwnedProcesses({ record, save() {} });
+  owned.add("owned-tree", parent);
+  await owned.stop("SIGINT");
+  assert.equal(owned.groupAlive(parent), false);
+  assert.equal(pidAlive(parent.pid), false);
+  assert.equal(pidAlive(childPid), false);
+});
+
 test("真实构建父进程已退出时仍清理其独占进程组，不遗留子工具", async (t) => {
+  if (process.platform !== "linux")
+    return t.skip("父进程先退出后的进程组回收在 Linux 上验证；其余平台见停止后子进程退出用例");
+  const { signalTree } = require("../../electron/services/platform/process-tree.cjs");
   const script =
     "const {spawn}=require('node:child_process');const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});child.unref();console.log(child.pid);";
   const parent = spawn(process.execPath, ["-e", script], {
@@ -887,9 +927,9 @@ test("真实构建父进程已退出时仍清理其独占进程组，不遗留�
   });
   t.after(() => {
     try {
-      process.kill(-parent.pid, "SIGKILL");
+      signalTree(parent.pid, "SIGKILL");
     } catch (error) {
-      if (error.code !== "ESRCH") throw error;
+      if (error.code !== "ESRCH" && error.code !== "EPERM") throw error;
     }
   });
   const record = { processes: {} },

@@ -16,72 +16,379 @@ on:
 permissions:
   contents: read
 
+# 只取消 PR / 分支上的进行中 run；正式标签与 candidate 复用调用不互相踩踏。
 concurrency:
-  group: desktop-ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')) }}
 
 env:
   CI: "true"
   CSC_IDENTITY_AUTO_DISCOVERY: "false"
   ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+  ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.runtime/electron-builder
 
 jobs:
-  desktop:
-    name: Desktop units, Core, real process and native UI
-    runs-on: macos-15
-    timeout-minutes: 60
+  lint:
+    name: Format, documents and audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.source_ref || github.sha }}
           submodules: recursive
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: ./.github/actions/setup-ci
         with:
-          node-version-file: .nvmrc
-          cache: npm
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
-        with:
-          distribution: temurin
-          java-version: "21"
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: "3.13"
-      - name: Check the acceptance architecture
-        run: node -e "if(process.arch !== 'arm64') throw new Error('1.0.0 CI 要求 macOS arm64 runner')"
-      # 同一个入口准备依赖、固定公共资源和当前构建；不需要 Chromium 插件或云服务。
-      - name: Run the isolated desktop gate
-        run: bash scripts/test-desktop.sh --verify
-      - name: Verify actual Core Jar, SBOM and original license bytes
-        run: python3 core-java/scripts/verify-release.py
+          java: "false"
+
       - name: Verify formatting and public documents
         run: |
           npm run format:check
           npm run docs:check
           npm audit --omit=dev --audit-level=high
-      - name: Verify first install and seven-day usage
-        run: bash scripts/test-desktop.sh --journey --prepared
-      - name: Build the current unsigned application
-        run: node scripts/package.cjs dir
-      - name: Verify actual packaged licenses, contract and source bytes
+
+  macos-verify:
+    name: macOS verify
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+          submodules: recursive
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+      - name: Check the acceptance architecture
+        run: node -e "if(process.arch !== 'arm64') throw new Error('macOS 完整门禁要求 arm64 runner')"
+      - name: Isolated desktop gate
+        run: bash scripts/test-desktop.sh --verify
+      - name: Verify actual Core Jar, SBOM and original license bytes
+        run: python3 core-java/scripts/verify-release.py
+      - name: Upload verify evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-macos-verify
+          path: |
+            test-results/desktop-001/
+            playwright-report/desktop-001/
+            core-java/target/surefire-reports/
+            core-java/target/release-verification.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  macos-journey:
+    name: macOS journey
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+          submodules: recursive
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+      - name: First install and seven-day usage
+        run: bash scripts/test-desktop.sh --journey
+      - name: Upload journey evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-macos-journey
+          path: |
+            test-results/daily-journey/
+            playwright-report/daily-journey/
+          if-no-files-found: warn
+          retention-days: 14
+
+  macos-package:
+    name: macOS package
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+          submodules: recursive
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+      - name: Build unsigned application directory
+        run: npm run package:dir
+      - name: Verify packaged licenses, contract and source bytes
         run: |
           mkdir -p test-results/package-materials
           node scripts/verify-package-materials.cjs > test-results/package-materials/results.json
       - name: Verify bundled Java and actual application
         run: npm run test:package:desktop
-      - name: Upload local workflow evidence
+      - name: Upload package evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: desktop-local-workflow
+          name: desktop-macos-package
           path: |
-            test-results/desktop-001/
-            playwright-report/desktop-001/
-            playwright-report/desktop-001-package/
-            core-java/target/surefire-reports/
-            core-java/target/release-verification.json
             test-results/package-materials/
-            test-results/daily-journey/
-            playwright-report/daily-journey/
+            playwright-report/desktop-001-package/
           if-no-files-found: warn
           retention-days: 14
+
+  ubuntu-core:
+    name: Ubuntu core-cross
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+          submodules: recursive
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+      - name: Cross-platform core gate
+        run: node scripts/verify-cross.cjs
+      - name: Verify actual Core Jar, SBOM and original license bytes
+        run: python3 core-java/scripts/verify-release.py
+      - name: Upload core evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-ubuntu-core
+          path: |
+            core-java/target/surefire-reports/
+            core-java/target/release-verification.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  ubuntu-package:
+    name: Ubuntu package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+          submodules: recursive
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+      - name: Build unsigned installers
+        run: npm run package:dist
+      - name: Verify packaged licenses, contract and source bytes
+        run: |
+          mkdir -p test-results/package-materials
+          node scripts/verify-package-materials.cjs > test-results/package-materials/results.json
+      - name: Upload installers for Linux smoke
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pkg-ubuntu-24.04-x64
+          path: |
+            release/**/*.AppImage
+            release/**/*.deb
+          if-no-files-found: error
+          retention-days: 3
+      - name: Upload package evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-ubuntu-package
+          path: test-results/package-materials/
+          if-no-files-found: warn
+          retention-days: 14
+
+  windows-core:
+    name: Windows core-cross
+    runs-on: windows-2025
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+          submodules: recursive
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+      - name: Exclude Defender from Core unit-test copies only
+        shell: pwsh
+        run: |
+          $tmp = Join-Path "${{ github.workspace }}" ".runtime/ci-tmp"
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          node -e "require('./electron/services/platform/win32-acl.cjs').protectWindowsPath(process.argv[1])" $tmp
+          echo "TMP=$tmp" >> $env:GITHUB_ENV
+          echo "TEMP=$tmp" >> $env:GITHUB_ENV
+          echo "TMPDIR=$tmp" >> $env:GITHUB_ENV
+          $paths = @("${{ github.workspace }}", "${{ runner.temp }}", $tmp)
+          foreach ($path in ($paths | Select-Object -Unique)) {
+            if ($path) {
+              try { Add-MpPreference -ExclusionPath $path } catch { Write-Warning $_ }
+            }
+          }
+          foreach ($proc in @("java.exe", "javaw.exe")) {
+            try { Add-MpPreference -ExclusionProcess $proc } catch { Write-Warning $_ }
+          }
+      - name: Cross-platform core gate
+        timeout-minutes: 18
+        run: node scripts/verify-cross.cjs
+      - name: Verify actual Core Jar, SBOM and original license bytes
+        run: python3 core-java/scripts/verify-release.py
+      - name: Upload core evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-windows-core
+          path: |
+            core-java/target/surefire-reports/
+            core-java/target/release-verification.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  windows-package:
+    name: Windows package
+    runs-on: windows-2025
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+          submodules: recursive
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+      - name: Build unsigned NSIS installer
+        run: npm run package:dist
+      - name: Verify packaged licenses, contract and source bytes
+        run: |
+          mkdir -p test-results/package-materials
+          node scripts/verify-package-materials.cjs > test-results/package-materials/results.json
+      - name: Upload installer for Windows smoke
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pkg-windows-2025-x64
+          path: release/**/*.exe
+          if-no-files-found: error
+          retention-days: 3
+      - name: Upload package evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-windows-package
+          path: test-results/package-materials/
+          if-no-files-found: warn
+          retention-days: 14
+
+  install-smoke-windows:
+    name: Install smoke (windows-2025, nsis)
+    needs: windows-package
+    runs-on: windows-2025
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+        with:
+          java: "false"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: pkg-windows-2025-x64
+          path: pkg
+      - name: Locate installer
+        env:
+          KIND: nsis
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const kind = process.env.KIND;
+          const root = path.resolve('pkg');
+          const files = [];
+          const visit = (dir) => {
+            for (const name of fs.readdirSync(dir)) {
+              const full = path.join(dir, name);
+              if (fs.statSync(full).isDirectory()) visit(full);
+              else files.push(full);
+            }
+          };
+          visit(root);
+          const match = files.find((file) => /\.exe$/i.test(file));
+          if (!match) throw new Error(`pkg 中没有 ${kind} 安装包`);
+          fs.appendFileSync(process.env.GITHUB_ENV, `LEXIMEET_INSTALLER=${match}\nLEXIMEET_INSTALL_KIND=${kind}\n`);
+          NODE
+      - name: Confirm Windows Defender stays on for first launch
+        shell: pwsh
+        run: |
+          # 对齐真实用户：打开实时保护，不排除工作区或安装目录。
+          foreach ($i in 1..6) {
+            try { Set-MpPreference -DisableRealtimeMonitoring $false } catch { Write-Warning $_ }
+            try { Set-MpPreference -DisableIOAVProtection $false } catch { Write-Warning $_ }
+            $status = Get-MpComputerStatus
+            Write-Host "attempt=$i RealTimeProtectionEnabled=$($status.RealTimeProtectionEnabled) AntivirusEnabled=$($status.AntivirusEnabled)"
+            if ($status.RealTimeProtectionEnabled) { exit 0 }
+            Start-Sleep -Seconds 2
+          }
+          throw "install-smoke 须在 Defender 实时保护开启时验证安装后启动，不能排除扫描"
+      - name: L2 install, start, Core/MCP, uninstall
+        run: node scripts/install-smoke.cjs
+
+  install-smoke-linux:
+    name: Install smoke (ubuntu-24.04, ${{ matrix.kind }})
+    needs: ubuntu-package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        kind: [deb, appimage]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+        with:
+          java: "false"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: pkg-ubuntu-24.04-x64
+          path: pkg
+      - name: Install Linux display for AppImage/deb launch
+        run: sudo apt-get update -qq && sudo apt-get install -y xvfb libfuse2t64 || sudo apt-get install -y xvfb libfuse2
+      - name: Locate installer
+        env:
+          KIND: ${{ matrix.kind }}
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const kind = process.env.KIND;
+          const root = path.resolve('pkg');
+          const files = [];
+          const visit = (dir) => {
+            for (const name of fs.readdirSync(dir)) {
+              const full = path.join(dir, name);
+              if (fs.statSync(full).isDirectory()) visit(full);
+              else files.push(full);
+            }
+          };
+          visit(root);
+          const match = files.find((file) =>
+            kind === 'deb' ? /\.deb$/i.test(file) : /\.AppImage$/i.test(file));
+          if (!match) throw new Error(`pkg 中没有 ${kind} 安装包`);
+          fs.appendFileSync(process.env.GITHUB_ENV, `LEXIMEET_INSTALLER=${match}\nLEXIMEET_INSTALL_KIND=${kind}\n`);
+          NODE
+      - name: L2 install, start, Core/MCP, uninstall
+        run: xvfb-run -a node scripts/install-smoke.cjs

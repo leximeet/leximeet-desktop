@@ -2,6 +2,7 @@ const { defineConfig } = require("@playwright/test");
 require("./tests/helpers/background-environment.cjs").assertBackgroundRunner();
 process.env.PW_CHROMIUM_ATTACH_TO_OTHER = "1";
 module.exports = defineConfig({
+  globalSetup: require.resolve("./tests/helpers/prepare-full-dictionary.cjs"),
   testDir: "./tests/desktop-package",
   workers: 1,
   timeout: 180000,

@@ -6,7 +6,7 @@ const { spawnSync } = require("node:child_process");
 function assertInstaller(filename, platform = process.platform, env = process.env) {
   if (!filename || !path.isAbsolute(filename) || !fs.statSync(filename).isFile())
     throw new Error("安装产物必须是现有文件的绝对路径");
-  const suffix = { darwin: /\.dmg$/, win32: /\.exe$/, linux: /\.AppImage$/ }[platform];
+  const suffix = { darwin: /\.dmg$/, win32: /\.exe$/, linux: /\.(?:AppImage|deb)$/ }[platform];
   if (!suffix?.test(filename)) throw new Error("安装产物类型与当前操作系统不符");
   // NSIS 会改写当前用户注册表、快捷方式，临时 /D 目录并不能隔离这些副作用。
   if (
@@ -76,14 +76,21 @@ function createInstallation() {
         mounted = undefined;
       }
     } else if (process.platform === "linux") {
-      // 验证 AppImage 内的可分发 payload；不声称覆盖 FUSE 桌面集成。
-      const extraction = fs.mkdtempSync(path.join(root, "extract-"));
-      const image = path.join(extraction, "candidate.AppImage");
-      fs.copyFileSync(filename, image);
-      fs.chmodSync(image, 0o755);
-      run(image, ["--appimage-extract"], { cwd: extraction });
-      removeOwnTarget();
-      fs.renameSync(path.join(extraction, "squashfs-root"), target);
+      if (/\.deb$/.test(filename)) {
+        // 解包 deb 验证内容；系统级 apt 安装留给干净 runner 的 install-smoke。
+        removeOwnTarget();
+        fs.mkdirSync(target, { recursive: true });
+        run("dpkg-deb", ["-x", filename, target]);
+      } else {
+        // 验证 AppImage 内的可分发 payload；不声称覆盖 FUSE 桌面集成。
+        const extraction = fs.mkdtempSync(path.join(root, "extract-"));
+        const image = path.join(extraction, "candidate.AppImage");
+        fs.copyFileSync(filename, image);
+        fs.chmodSync(image, 0o755);
+        run(image, ["--appimage-extract"], { cwd: extraction });
+        removeOwnTarget();
+        fs.renameSync(path.join(extraction, "squashfs-root"), target);
+      }
     } else {
       fs.mkdirSync(target, { recursive: true });
       // /D 必须最后出现，NSIS 自行解析余下的完整路径（包含空格）。
@@ -93,7 +100,11 @@ function createInstallation() {
     const executable =
       process.platform === "darwin"
         ? path.join(target, "LexiMeet.app/Contents/MacOS/LexiMeet")
-        : path.join(target, process.platform === "win32" ? "LexiMeet.exe" : "leximeet");
+        : process.platform === "win32"
+          ? path.join(target, "LexiMeet.exe")
+          : fs.existsSync(path.join(target, "opt/LexiMeet/leximeet"))
+            ? path.join(target, "opt/LexiMeet/leximeet")
+            : path.join(target, "leximeet");
     if (!fs.existsSync(executable)) throw new Error(`安装完成但缺少可执行文件：${executable}`);
     return executable;
   }

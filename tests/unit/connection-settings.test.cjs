@@ -1,6 +1,7 @@
 "use strict";
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
+const path = require("node:path");
 const { ConnectionSettings } = require("../../electron/services/connection-settings.cjs");
 const id = "00000000-0000-4000-8000-000000000001";
 function fixture(name = "test") {
@@ -98,7 +99,10 @@ test("测试和演示注册固定到各自目录，不能碰日常浏览器", as
         isolated: true,
       },
     );
-    assert.equal(calls[0].browserDataDir, "/tmp/leximeet-test/browser-profile/chrome");
+    assert.equal(
+      calls[0].browserDataDir,
+      path.join("/tmp/leximeet-test", "browser-profile", "chrome"),
+    );
     assert.equal(calls[0].allowDailyRegistration, false);
   }
 });
@@ -109,7 +113,11 @@ test("正式用户明确点击注册才写本用户浏览器，状态不泄露�
     extensionId: "b".repeat(32),
     browser: "edge",
   });
-  assert.equal(calls[0].browserDataDir, "/Users/test/Library/Application Support/Microsoft Edge");
+  const { browserUserDataDir } = require("../../electron/services/platform/app-paths.cjs");
+  assert.equal(
+    calls[0].browserDataDir,
+    browserUserDataDir("edge", { homeDir: "/Users/test", platform: "darwin" }),
+  );
   assert.equal(calls[0].allowDailyRegistration, true);
   const state = await manager.action({ action: "state" });
   assert.deepEqual(state.transport, {
@@ -133,4 +141,25 @@ test("正式用户明确点击注册才写本用户浏览器，状态不泄露�
     action: "cancelInvitation",
     invitationId: id,
   });
+});
+
+test("Windows / Linux 正式注册写各平台浏览器目录，状态标记可注册", async () => {
+  const { browserUserDataDir } = require("../../electron/services/platform/app-paths.cjs");
+  for (const [platform, homeDir] of [
+    ["win32", path.resolve("/tmp/leximeet-win-home")],
+    ["linux", path.resolve("/tmp/leximeet-linux-home")],
+  ]) {
+    const { manager, calls } = fixture("local");
+    manager.platform = platform;
+    manager.homeDir = homeDir;
+    await manager.action({
+      action: "registerHost",
+      extensionId: "c".repeat(32),
+      browser: "chrome",
+    });
+    assert.equal(calls[0].browserDataDir, browserUserDataDir("chrome", { homeDir, platform }));
+    assert.equal(calls[0].platform, platform);
+    const state = await manager.action({ action: "state" });
+    assert.equal(state.registration.supported, true);
+  }
 });

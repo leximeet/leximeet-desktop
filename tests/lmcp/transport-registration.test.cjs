@@ -3,7 +3,6 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const os = require("node:os");
 const { spawnSync } = require("node:child_process");
 const { parseArguments, registerIsolatedHost } = require("../../scripts/lmcp/register-host.cjs");
 const {
@@ -12,27 +11,21 @@ const {
   assertRegistrationOwnership,
 } = require("../../electron/services/lmcp/native-registration.cjs");
 const { readPrivateJson } = require("../../electron/services/lmcp/private-files.cjs");
+const { isolatedProfile } = require("../helpers/isolated-profile.cjs");
 const project = path.resolve(__dirname, "../..");
 
 function fixture(t, marker = { profile: "test" }) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "lmcp-register-test-"));
-  const profileRoot = path.join(root, "desktop");
-  fs.mkdirSync(profileRoot, { mode: 0o700 });
-  if (marker)
-    fs.writeFileSync(path.join(profileRoot, "profile.json"), JSON.stringify(marker), {
-      mode: 0o600,
-    });
+  const { root, profileRoot } = isolatedProfile(t, {
+    prefix: "lmcp-register-test-",
+    marker,
+  });
   const input = {
     profileRoot,
     browserDataDir: path.join(profileRoot, "browser-profile", "chrome"),
     extensionId: "a".repeat(32),
-    electronExecutable: path.join(
-      project,
-      "node_modules/electron/dist/Electron.app/Contents/MacOS/Electron",
-    ),
+    electronExecutable: require("../helpers/electron-binary.cjs").electronBinary(),
     hostScript: path.join(project, "electron/native-host/main.cjs"),
   };
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   return { root, input };
 }
 

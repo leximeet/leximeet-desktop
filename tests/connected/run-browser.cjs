@@ -6,6 +6,7 @@ const { spawn, spawnSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
 const { once } = require("node:events");
 const gate = require("../../scripts/lib/connected-readiness.cjs");
+const { signalTree } = require("../../electron/services/platform/process-tree.cjs");
 const desktopRoot = path.resolve(__dirname, "../..");
 const browserRoot = path.resolve(desktopRoot, "../plugin/leximeet-browser");
 const REQUIRED_SCENARIOS = 9;
@@ -29,7 +30,8 @@ function passesCurrentSuite(record, stats) {
 async function main() {
   if (process.argv.length > 2)
     throw new Error("该入口不接受可见/调试/重试参数；人工验收使用 --connected");
-  if (process.platform !== "darwin") throw new Error("真实 Native 联调当前仅完成 macOS");
+  if (!["darwin", "linux"].includes(process.platform))
+    throw new Error("真实 Native 联调当前覆盖 macOS/Linux；Windows 需人工验收");
   require("../helpers/background-environment.cjs").assertBackgroundRunner();
   const candidate = gate.checkReadiness();
   require("../../scripts/lmcp/verify-contract.cjs").verifyContract();
@@ -109,14 +111,14 @@ async function main() {
     if (!Number.isInteger(child.pid) || child.exitCode !== null || child.signalCode !== null)
       return;
     try {
-      process.kill(-child.pid, "SIGTERM");
+      signalTree(child.pid, "SIGTERM");
     } catch (error) {
       if (error.code !== "ESRCH") throw error;
     }
     forceTimer ||= setTimeout(() => {
       if (child.exitCode === null && child.signalCode === null)
         try {
-          process.kill(-child.pid, "SIGKILL");
+          signalTree(child.pid, "SIGKILL");
         } catch (error) {
           if (error.code !== "ESRCH") console.error(error.message);
         }

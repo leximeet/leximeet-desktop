@@ -1,9 +1,8 @@
 "use strict";
-const fs = require("node:fs");
 const path = require("node:path");
-const net = require("node:net");
 const { FrameDecoder, FrameWriter } = require("../services/lmcp/framing.cjs");
-const { readPrivateJson, assertPrivate } = require("../services/lmcp/private-files.cjs");
+const { readPrivateJson } = require("../services/lmcp/private-files.cjs");
+const { parseDescriptor, connectEndpoint } = require("../services/platform/transport.cjs");
 
 /**
  * Chrome 创建的独立进程，仅桥接 stdio 与受保护 UDS，不加载 Electron UI/Core。
@@ -40,25 +39,14 @@ function runNativeHost({
       !/^chrome-extension:\/\/[a-p]{32}\/$/.test(extensionOrigin || "")
     )
       throw new Error("SOURCE_REJECTED");
-    const descriptor = readPrivateJson(descriptorPath);
+    const descriptor = parseDescriptor(readPrivateJson(descriptorPath));
     if (
-      descriptor.format !== "leximeet.lmcp-uds/1" ||
       !descriptor.allowedOrigins?.includes(extensionOrigin) ||
-      !/^[a-f0-9]{64}$/.test(descriptor.token || "") ||
-      !path.isAbsolute(descriptor.socketPath || "")
+      !/^[a-f0-9]{64}$/.test(descriptor.token || "")
     )
       throw new Error("SOURCE_REJECTED");
-    assertPrivate(path.dirname(descriptor.socketPath), { directory: true });
-    const stat = fs.lstatSync(descriptor.socketPath);
-    if (
-      !stat.isSocket() ||
-      stat.isSymbolicLink() ||
-      stat.mode & 0o077 ||
-      (typeof process.getuid === "function" && stat.uid !== process.getuid())
-    )
-      throw new Error("UNSAFE_SOCKET");
     input.pause();
-    socket = net.connect(descriptor.socketPath);
+    socket = connectEndpoint(descriptor);
     socketWriter = new FrameWriter(socket, { onError: () => finish("BACKPRESSURE_LIMIT", true) });
     outputWriter = new FrameWriter(output, { onError: () => finish("BACKPRESSURE_LIMIT", true) });
     const fromBrowser = new FrameDecoder();
@@ -109,8 +97,9 @@ function runNativeHost({
     socket.on("close", () => finish());
     return { close: finish, socket };
   } catch (error) {
+    if (error?.message) diagnostic.write(`${error.message}\n`);
     finish(
-      ["SOURCE_REJECTED", "UNSAFE_SOCKET"].includes(error.message)
+      ["SOURCE_REJECTED", "UNSAFE_SOCKET", "UNSAFE_PRIVATE_PATH"].includes(error.message)
         ? error.message
         : "HOST_UNAVAILABLE",
       true,

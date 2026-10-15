@@ -14,42 +14,46 @@ const {
 } = require("../electron/services/text-dictionary-index.cjs");
 const root = path.resolve(__dirname, "..");
 
-async function download(url, destination) {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function downloadOnce(url, destination) {
   const temporary = `${destination}.download`;
   try {
-    if (!url.startsWith("https://")) throw new Error("词典下载只接受 HTTPS");
-    let received = false;
-    for (const proxy of [null, "http://127.0.0.1:7897", "http://127.0.0.1:12334"]) {
-      // Node 原生 fetch 不自动使用用户的代理变量；curl 提供一致的直连与代理回退。
-      const status = await new Promise((resolve, reject) => {
-        const child = spawn(
-          "curl",
-          [
-            "-fL",
-            "--connect-timeout",
-            "10",
-            "--max-time",
-            "240",
-            ...(proxy ? ["--proxy", proxy] : []),
-            url,
-            "-o",
-            temporary,
-          ],
-          { stdio: "inherit" },
-        );
-        child.once("error", reject);
-        child.once("exit", resolve);
-      });
-      if (status === 0) {
-        received = true;
-        break;
-      }
-    }
-    if (!received) throw new Error("词典下载失败，请检查网络或代理");
+    // 只走当前 HTTPS；失败由外层重试，不回退本机代理端口。
+    const status = await new Promise((resolve, reject) => {
+      const child = spawn(
+        "curl",
+        ["-fL", "--connect-timeout", "10", "--max-time", "240", url, "-o", temporary],
+        { stdio: "inherit" },
+      );
+      child.once("error", reject);
+      child.once("exit", resolve);
+    });
+    if (status !== 0) throw new Error("词典下载失败，请检查网络");
     fs.renameSync(temporary, destination);
   } finally {
     fs.rmSync(temporary, { force: true });
   }
+}
+
+async function download(url, destination, { attempts = 3 } = {}) {
+  if (!url.startsWith("https://")) throw new Error("词典下载只接受 HTTPS");
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      await downloadOnce(url, destination);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) {
+        console.warn(`词典下载第 ${attempt} 次失败，准备重试：${error.message}`);
+        await sleep(1500 * attempt);
+      }
+    }
+  }
+  throw lastError;
 }
 async function prepareSource(edition = "core-text") {
   const local =

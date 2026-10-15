@@ -19,7 +19,18 @@ function installBackgroundTest({ app, shell, dialog, env, platform = process.pla
     if (violations.length < 100) violations.push({ kind, windowId: id });
   };
   if (platform === "darwin") app.setActivationPolicy("prohibited");
+  // 无显示 Windows runner 没有可用 GPU；关掉硬件加速，但保留软件光栅，否则窗口创建会崩。
+  if (platform === "win32") {
+    if (typeof app.disableHardwareAcceleration === "function") app.disableHardwareAcceleration();
+    app.commandLine.appendSwitch("disable-gpu");
+  }
   app.commandLine.appendSwitch("mute-audio");
+  if (!process.__leximeetRejectionLog) {
+    process.__leximeetRejectionLog = true;
+    process.on("unhandledRejection", (reason) => {
+      console.error("后台测试未处理拒绝：", reason && (reason.stack || reason.message || reason));
+    });
+  }
   for (const method of ["show", "focus"])
     if (typeof app[method] === "function") app[method] = () => note(`app.${method}`);
   if (platform === "darwin") {
@@ -77,8 +88,14 @@ function installBackgroundTest({ app, shell, dialog, env, platform = process.pla
   ])
     for (const method of methods) {
       if (typeof api?.[method] !== "function") continue;
-      api[method] = () => {
+      api[method] = (...args) => {
         note(`host.${method}`);
+        // Electron 未处理拒绝会回调 showErrorBox；再抛会二次崩溃，描述符永远写不出。
+        if (method === "showErrorBox") {
+          console.error(`后台测试捕获 showErrorBox：${args[0] || ""}\n原始错误：${args[1] || ""}`);
+          violation("showErrorBox", 0);
+          return;
+        }
         throw new Error(`后台自动测试禁止 ${method}；请使用独立可见验收应用检查系统交互。`);
       };
     }

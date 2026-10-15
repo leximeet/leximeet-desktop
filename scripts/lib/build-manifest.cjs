@@ -40,7 +40,7 @@ async function writeBuildManifest({ root, output, mode, version, sources }) {
   if (packaged.version !== version) throw new Error("实际应用版本与本轮构建版本不一致");
   const files = fs
     .readdirSync(output)
-    .filter((name) => /\.(?:dmg|zip|exe|AppImage)$/.test(name))
+    .filter((name) => /\.(?:dmg|zip|exe|AppImage|deb)$/.test(name))
     .sort();
   if (mode === "dist" && !files.length) throw new Error("未生成本轮安装文件");
   const artifacts = [];
@@ -51,8 +51,14 @@ async function writeBuildManifest({ root, output, mode, version, sources }) {
       sha256: await digest(path.join(output, name)),
     });
   const current = { desktop: sourceState(root), core: sourceState(path.join(root, "core-java")) };
-  if (sources && JSON.stringify(current) !== JSON.stringify(sources))
-    throw new Error("构建期间源码提交或干净状态发生变化，请重新构建同一候选");
+  if (sources && JSON.stringify(current) !== JSON.stringify(sources)) {
+    const porcelain = spawnSync("git", ["status", "--porcelain"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const detail = porcelain.stdout?.trim() ? `\n${porcelain.stdout.trim()}` : "";
+    throw new Error(`构建期间源码提交或干净状态发生变化，请重新构建同一候选${detail}`);
+  }
   sources ||= current;
   const contract = JSON.parse(fs.readFileSync(path.join(root, "resources/lmcp/contract.json")));
   const dictionary = JSON.parse(
