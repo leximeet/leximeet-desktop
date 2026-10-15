@@ -9,6 +9,7 @@ const {
   descriptorWaitMs,
   appLaunchArgs,
   prepareIsolatedHome,
+  removeSmokeProfile,
 } = require("../../scripts/install-smoke.cjs");
 
 test("Windows 首次启动握手宽于 POSIX，覆盖 Defender 实时扫描", () => {
@@ -69,4 +70,11 @@ test("隔离冒烟会创建 Windows AppData 目录，避免 Electron getPath 失
   prepareIsolatedHome(profileDir, env);
   assert.equal(fs.existsSync(env.APPDATA), true);
   assert.equal(fs.existsSync(env.LOCALAPPDATA), true);
+});
+
+test("安装冒烟清理已删或空目录不失败", () => {
+  const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), "leximeet-smoke-rm-"));
+  removeSmokeProfile(profileDir);
+  assert.equal(fs.existsSync(profileDir), false);
+  assert.doesNotThrow(() => removeSmokeProfile(profileDir));
 });

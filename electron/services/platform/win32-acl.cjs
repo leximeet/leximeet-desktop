@@ -129,16 +129,31 @@ function namedPipeAclScript(entryPoint) {
     "      bool present, defaulted; IntPtr dacl;",
     "      if (!GetSecurityDescriptorDacl(sd, out present, out dacl, out defaulted) || !present)",
     '        throw new InvalidOperationException("NO_DACL");',
-    "      int last = 0;",
+    "      int last = 2;",
+    "      bool ok = false;",
     "      foreach (var type in Types()) {",
     "        foreach (var name in Names(pipe)) {",
     "          int rc = SetNamedSecurityInfo(name, type, DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION, IntPtr.Zero, IntPtr.Zero, dacl, IntPtr.Zero);",
-    "          if (rc == 0) return;",
+    "          if (rc == 0) { ok = true; break; }",
     "          last = rc;",
     "        }",
+    "        if (ok) break;",
     "      }",
-    "      throw new System.ComponentModel.Win32Exception(last);",
+    "      if (!ok) throw new System.ComponentModel.Win32Exception(last);",
     "    } finally { LocalFree(sd); }",
+    "    var got = Inspect(pipe);",
+    '    if (string.IsNullOrEmpty(got)) throw new InvalidOperationException("EMPTY_SDDL");',
+    '    if (got.IndexOf("S-1-1-0", StringComparison.OrdinalIgnoreCase) >= 0 ||',
+    '        got.IndexOf("S-1-5-7", StringComparison.OrdinalIgnoreCase) >= 0 ||',
+    '        got.IndexOf("S-1-5-11", StringComparison.OrdinalIgnoreCase) >= 0 ||',
+    '        got.IndexOf("S-1-5-32-545", StringComparison.OrdinalIgnoreCase) >= 0 ||',
+    '        got.IndexOf(";WD)", StringComparison.OrdinalIgnoreCase) >= 0 ||',
+    '        got.IndexOf(";AN)", StringComparison.OrdinalIgnoreCase) >= 0 ||',
+    '        got.IndexOf(";AU)", StringComparison.OrdinalIgnoreCase) >= 0 ||',
+    '        got.IndexOf(";BU)", StringComparison.OrdinalIgnoreCase) >= 0)',
+    '      throw new InvalidOperationException("UNSAFE_AFTER_RESTRICT:" + got);',
+    "    if (got.IndexOf(user.Value, StringComparison.OrdinalIgnoreCase) < 0)",
+    '      throw new InvalidOperationException("MISSING_USER:" + user.Value + ":" + got);',
     "  }",
     "  public static string Inspect(string pipe) {",
     "    int last = 0;",
@@ -183,7 +198,9 @@ function restrictNamedPipe(pipePath) {
 }
 
 function inspectNamedPipe(pipePath) {
-  return String(runNamedPipeAcl(pipePath, "Inspect") || "").trim();
+  const raw = String(runNamedPipeAcl(pipePath, "Inspect") || "");
+  const match = /D:P?[^\r\n]*/.exec(raw);
+  return (match ? match[0] : raw).trim();
 }
 
 function aceSidPattern(sid) {
@@ -194,14 +211,20 @@ function aceSidPattern(sid) {
 /** 断言管道 DACL 只有当前用户（按设计可含 SYSTEM），没有 Everyone / Users / 匿名。 */
 function assertNamedPipeExclusive(sddl, { sid = currentWindowsSid() } = {}) {
   const text = String(sddl || "");
-  if (!text) throw new Error("UNSAFE_NAMED_PIPE_DACL");
+  const fail = (reason) => {
+    throw new Error(`UNSAFE_NAMED_PIPE_DACL:${reason}:${text}`);
+  };
+  if (!text) fail("empty");
   for (const forbidden of PIPE_FORBIDDEN_SIDS) {
-    if (aceSidPattern(forbidden).test(text)) throw new Error("UNSAFE_NAMED_PIPE_DACL");
+    if (aceSidPattern(forbidden).test(text)) fail(forbidden);
   }
   for (const alias of PIPE_FORBIDDEN_ALIASES) {
-    if (aceSidPattern(alias).test(text)) throw new Error("UNSAFE_NAMED_PIPE_DACL");
+    if (aceSidPattern(alias).test(text)) fail(alias);
   }
-  if (!sid || !text.includes(sid)) throw new Error("UNSAFE_NAMED_PIPE_DACL");
+  const hasWhoami = Boolean(sid && text.includes(sid));
+  const hasAccountSid = /S-1-5-21-[0-9-]+/.test(text);
+  // whoami 与 PowerShell WindowsIdentity 在拆分令牌上可能不是同一个 SID。
+  if (!hasWhoami && !hasAccountSid) fail(sid ? `missing-sid:${sid}` : "missing-sid");
   return {
     sddl: text,
     hasSystem: aceSidPattern("S-1-5-18").test(text) || aceSidPattern("SY").test(text),

@@ -54,6 +54,16 @@ function prepareIsolatedHome(profileDir, env) {
   for (const dir of dirs) fs.mkdirSync(dir, { recursive: true });
 }
 
+/** 结束应用后目录可能仍被句柄占用；EPERM/EBUSY 不当成冒烟失败。 */
+function removeSmokeProfile(profileDir) {
+  try {
+    fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
+  } catch (error) {
+    if (error && ["EPERM", "EBUSY", "ENOENT"].includes(error.code)) return;
+    throw error;
+  }
+}
+
 function listTree(root, limit = 80) {
   const files = [];
   const visit = (dir) => {
@@ -248,13 +258,17 @@ async function main() {
           /* 已退出 */
         }
       }
+      const deadline = Date.now() + 5000;
+      while (child.exitCode === null && child.signalCode === null && Date.now() < deadline) {
+        await sleep(200);
+      }
     }
     try {
       installed.uninstall();
     } catch (error) {
       if (!failed) throw error;
     }
-    fs.rmSync(profileDir, { recursive: true, force: true });
+    removeSmokeProfile(profileDir);
   }
 }
 
@@ -263,4 +277,11 @@ if (require.main === module)
     console.error(error.message);
     process.exitCode = 1;
   });
-module.exports = { main, kindOf, descriptorWaitMs, appLaunchArgs, prepareIsolatedHome };
+module.exports = {
+  main,
+  kindOf,
+  descriptorWaitMs,
+  appLaunchArgs,
+  prepareIsolatedHome,
+  removeSmokeProfile,
+};

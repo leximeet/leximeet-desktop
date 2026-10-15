@@ -29,6 +29,7 @@ test("命名管道 ACL 先按 SE_FILE_OBJECT 找 \\\\.\\pipe\\ 名，再回退�
   assert.match(script, /SE_KERNEL_OBJECT = 6/);
   assert.match(script, /foreach \(var type in Types\(\)\)/);
   assert.match(script, /prefix = @"\\\\\.\\pipe\\"/);
+  assert.match(script, /UNSAFE_AFTER_RESTRICT/);
   const inspect = namedPipeAclScript("Inspect");
   assert.match(inspect, /SE_FILE_OBJECT = 1/);
   assert.match(inspect, /foreach \(var type in Types\(\)\)/);
@@ -58,6 +59,10 @@ test("管道 DACL 断言拒绝 Everyone / Users / 匿名", () => {
   const sid = "S-1-5-21-1-2-3-1001";
   const ok = assertNamedPipeExclusive(`D:P(A;;GA;;;${sid})(A;;GA;;;S-1-5-18)`, { sid });
   assert.equal(ok.hasSystem, true);
+  const mismatch = assertNamedPipeExclusive(`D:P(A;;GA;;;${sid})(A;;GA;;;SY)`, {
+    sid: "S-1-5-21-9-9-9-9",
+  });
+  assert.equal(mismatch.hasSystem, true);
   for (const forbidden of PIPE_FORBIDDEN_SIDS) {
     assert.throws(
       () => assertNamedPipeExclusive(`D:P(A;;GA;;;${sid})(A;;GR;;;${forbidden})`, { sid }),
