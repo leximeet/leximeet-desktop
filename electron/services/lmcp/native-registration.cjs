@@ -242,8 +242,15 @@ function assertRegistrationOwnership(record) {
     [record.launcher, record.launcherSha256],
   ]) {
     if (!fs.existsSync(file)) throw new Error("NATIVE_REGISTRATION_CHANGED");
-    assertPrivate(path.dirname(file), { directory: true });
-    const stat = assertPrivate(file);
+    let stat;
+    try {
+      assertPrivate(path.dirname(file), { directory: true });
+      stat = assertPrivate(file);
+    } catch (error) {
+      // Windows 上改写清单可能丢掉私有 ACL，与内容被改一样视为登记已变。
+      if (error.message === "UNSAFE_PRIVATE_PATH") throw new Error("NATIVE_REGISTRATION_CHANGED");
+      throw error;
+    }
     const limit = file.endsWith(".exe") ? 1024 * 1024 : 65536;
     if (
       stat.size > limit ||

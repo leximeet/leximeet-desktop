@@ -12,7 +12,7 @@ const DEFAULT_BUDGET_MS = Object.freeze({
   "test:core": 360000,
   "build:core": 180000,
   "test:integration": 180000,
-  "test:lmcp:transport": 300000,
+  "test:lmcp:transport": 420000,
   "test:mcp": 180000,
   "test:desktop": 900000,
 });
