@@ -152,7 +152,11 @@ function namedPipeAclScript(entryPoint) {
     '        got.IndexOf(";AU)", StringComparison.OrdinalIgnoreCase) >= 0 ||',
     '        got.IndexOf(";BU)", StringComparison.OrdinalIgnoreCase) >= 0)',
     '      throw new InvalidOperationException("UNSAFE_AFTER_RESTRICT:" + got);',
-    "    if (got.IndexOf(user.Value, StringComparison.OrdinalIgnoreCase) < 0)",
+    "    bool hasUser = got.IndexOf(user.Value, StringComparison.OrdinalIgnoreCase) >= 0;",
+    "    // ConvertSecurityDescriptorToStringSecurityDescriptor 把 RID 500 写成 LA。",
+    '    bool hasLocalAdmin = got.IndexOf(";LA)", StringComparison.OrdinalIgnoreCase) >= 0',
+    '      || got.IndexOf(";BA)", StringComparison.OrdinalIgnoreCase) >= 0;',
+    "    if (!hasUser && !hasLocalAdmin)",
     '      throw new InvalidOperationException("MISSING_USER:" + user.Value + ":" + got);',
     "  }",
     "  public static string Inspect(string pipe) {",
@@ -223,8 +227,10 @@ function assertNamedPipeExclusive(sddl, { sid = currentWindowsSid() } = {}) {
   }
   const hasWhoami = Boolean(sid && text.includes(sid));
   const hasAccountSid = /S-1-5-21-[0-9-]+/.test(text);
-  // whoami 与 PowerShell WindowsIdentity 在拆分令牌上可能不是同一个 SID。
-  if (!hasWhoami && !hasAccountSid) fail(sid ? `missing-sid:${sid}` : "missing-sid");
+  // ConvertSecurityDescriptorToStringSecurityDescriptor 会把 RID 500 写成 LA。
+  const hasLocalAdmin = aceSidPattern("LA").test(text) || aceSidPattern("BA").test(text);
+  if (!hasWhoami && !hasAccountSid && !hasLocalAdmin)
+    fail(sid ? `missing-sid:${sid}` : "missing-sid");
   return {
     sddl: text,
     hasSystem: aceSidPattern("S-1-5-18").test(text) || aceSidPattern("SY").test(text),
