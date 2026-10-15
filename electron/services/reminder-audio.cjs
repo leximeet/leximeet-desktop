@@ -30,8 +30,9 @@ function playerCommand(file, audio, platform = process.platform) {
     };
   if (platform === "win32") {
     const quoted = file.replace(/'/g, "''");
+    const { windowsPowerShellBinary } = require("./platform/identity.cjs");
     return {
-      command: "powershell.exe",
+      command: windowsPowerShellBinary(),
       args: [
         "-NoProfile",
         "-NonInteractive",

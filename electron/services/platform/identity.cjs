@@ -21,16 +21,36 @@ function currentUserKey(platform = process.platform) {
   return createHash("sha256").update(currentUsername()).digest("hex").slice(0, 8);
 }
 
-/** 固定 %SystemRoot%\System32，不依赖 PATH，也不在测试里补 PATH。 */
-function windowsSystem32Binary(name) {
-  const file = String(name).toLowerCase().endsWith(".exe") ? name : `${name}.exe`;
-  const roots = [process.env.SystemRoot, process.env.WINDIR, "C:\\Windows"].filter(Boolean);
-  const candidates = roots.map((root) => path.join(root, "System32", file));
+function windowsRoots() {
+  return [process.env.SystemRoot, process.env.WINDIR, "C:\\Windows"].filter(Boolean);
+}
+
+function firstExisting(candidates, missing) {
   if (process.platform !== "win32") return candidates[0];
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) return candidate;
   }
-  throw new Error(`WINDOWS_SYSTEM32_MISSING:${file}`);
+  throw new Error(missing);
+}
+
+/** icacls / reg / whoami / taskkill 固定 %SystemRoot%\System32\<名字>.exe，不依赖 PATH。 */
+function windowsSystem32Binary(name) {
+  const file = String(name).toLowerCase().endsWith(".exe") ? name : `${name}.exe`;
+  if (/^powershell\.exe$/i.test(file)) throw new Error("WINDOWS_POWERSHELL_NOT_IN_SYSTEM32_ROOT");
+  return firstExisting(
+    windowsRoots().map((root) => path.join(root, "System32", file)),
+    `WINDOWS_SYSTEM32_MISSING:${file}`,
+  );
+}
+
+/** Windows PowerShell 5.1 在 System32\WindowsPowerShell\v1.0，不在 System32 根下。 */
+function windowsPowerShellBinary() {
+  return firstExisting(
+    windowsRoots().map((root) =>
+      path.join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
+    ),
+    "WINDOWS_SYSTEM32_MISSING:powershell.exe",
+  );
 }
 
 function windowsWhoami(args = []) {
@@ -66,4 +86,5 @@ module.exports = {
   currentWindowsSid,
   currentWindowsAccount,
   windowsSystem32Binary,
+  windowsPowerShellBinary,
 };

@@ -102,8 +102,9 @@ async function startBrowserProcessRssSampler(profile) {
   async function sample() {
     if (process.platform === "win32") {
       // PowerShell 仅读进程元数据，命令列只用于定位本例 profile，不写入报告或日志。
+      const { windowsPowerShellBinary } = require("../../electron/services/platform/identity.cjs");
       const { stdout } = await execFileAsync(
-        "powershell.exe",
+        windowsPowerShellBinary(),
         [
           "-NoProfile",
           "-NonInteractive",

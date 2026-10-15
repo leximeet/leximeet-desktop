@@ -1,6 +1,6 @@
 "use strict";
 const { execFileSync } = require("node:child_process");
-const { windowsSystem32Binary } = require("./identity.cjs");
+const { windowsPowerShellBinary } = require("./identity.cjs");
 
 /** 用 EncodedCommand 避免 powershell -Command 再吃一层反斜杠。 */
 function encodePowerShell(script) {
@@ -9,7 +9,7 @@ function encodePowerShell(script) {
 
 function runPowerShell(script, { timeout = 15000, env } = {}) {
   return execFileSync(
-    windowsSystem32Binary("powershell.exe"),
+    windowsPowerShellBinary(),
     [
       "-NoProfile",
       "-NonInteractive",

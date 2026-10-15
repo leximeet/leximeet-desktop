@@ -7,7 +7,10 @@ const {
   assertNamedPipeExclusive,
   PIPE_FORBIDDEN_SIDS,
 } = require("../../electron/services/platform/win32-acl.cjs");
-const { windowsSystem32Binary } = require("../../electron/services/platform/identity.cjs");
+const {
+  windowsSystem32Binary,
+  windowsPowerShellBinary,
+} = require("../../electron/services/platform/identity.cjs");
 
 test("命名管道 ACL 脚本用环境变量传路径，不用 JSON.stringify 嵌双引号", () => {
   const script = namedPipeAclScript("Restrict");
@@ -20,13 +23,24 @@ test("命名管道 ACL 脚本用环境变量传路径，不用 JSON.stringify �
   assert.equal(script.includes(JSON.stringify(pipe)), false);
 });
 
-test("icacls / reg / powershell 固定 System32 完整路径", () => {
-  for (const name of ["icacls.exe", "reg.exe", "powershell.exe", "whoami.exe"]) {
+test("icacls / reg / whoami / taskkill 固定 System32 根下的完整路径", () => {
+  for (const name of ["icacls.exe", "reg.exe", "whoami.exe", "taskkill.exe"]) {
     const resolved = windowsSystem32Binary(name);
     assert.match(resolved, /System32/i);
+    assert.doesNotMatch(resolved, /WindowsPowerShell/i);
     assert.match(resolved, new RegExp(`${name.replace(".", "\\.")}$`, "i"));
     assert.equal(path.isAbsolute(resolved) || resolved.includes("\\"), true);
   }
+  assert.throws(
+    () => windowsSystem32Binary("powershell.exe"),
+    /WINDOWS_POWERSHELL_NOT_IN_SYSTEM32_ROOT/,
+  );
+});
+
+test("powershell.exe 解析到 System32\\WindowsPowerShell\\v1.0", () => {
+  const resolved = windowsPowerShellBinary();
+  assert.match(resolved, /WindowsPowerShell[/\\]v1\.0[/\\]powershell\.exe$/i);
+  assert.equal(path.isAbsolute(resolved) || resolved.includes("\\"), true);
 });
 
 test("管道 DACL 断言拒绝 Everyone / Users / 匿名", () => {

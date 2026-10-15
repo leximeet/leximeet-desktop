@@ -11,9 +11,9 @@ function dumpProcessTree(reason = "进程仍在运行", run = execFileSync) {
   try {
     if (process.platform === "win32") {
       const { encodePowerShell } = require("../../electron/services/platform/powershell.cjs");
-      const { windowsSystem32Binary } = require("../../electron/services/platform/identity.cjs");
+      const { windowsPowerShellBinary } = require("../../electron/services/platform/identity.cjs");
       run(
-        windowsSystem32Binary("powershell.exe"),
+        windowsPowerShellBinary(),
         [
           "-NoProfile",
           "-NonInteractive",
