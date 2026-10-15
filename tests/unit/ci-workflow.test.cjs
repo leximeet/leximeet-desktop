@@ -18,7 +18,7 @@ test("CI 按平台拆开 smoke，lint 不阻塞，超时与 concurrency 符合�
   );
   assert.equal(workflow.includes("refs/tags/"), true);
   assert.equal(/name: Format, documents and audit[\s\S]*?timeout-minutes: 5/.test(workflow), true);
-  assert.equal(/name: macOS verify[\s\S]*?timeout-minutes: 25/.test(workflow), true);
+  assert.equal(/name: macOS verify[\s\S]*?timeout-minutes: 30/.test(workflow), true);
   assert.equal(/name: macOS journey[\s\S]*?timeout-minutes: 25/.test(workflow), true);
   assert.equal(/name: macOS package[\s\S]*?timeout-minutes: 25/.test(workflow), true);
   assert.equal(/name: Ubuntu core-cross[\s\S]*?timeout-minutes: 25/.test(workflow), true);
@@ -39,6 +39,8 @@ test("CI 按平台拆开 smoke，lint 不阻塞，超时与 concurrency 符合�
   assert.equal(packagePlaywright.includes("prepare-full-dictionary"), true);
   assert.equal(setup.includes("cache: maven"), true);
   assert.equal(setup.includes(".runtime/electron-cache"), true);
+  assert.equal(setup.includes(".runtime/dictionary-source"), true);
+  assert.equal(setup.includes("text-dictionary-index.cjs"), true);
   assert.equal(workflow.includes(".runtime/electron-builder"), true);
   assert.equal(workflow.includes("protectWindowsPath"), true);
 });

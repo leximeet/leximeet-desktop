@@ -1,14 +1,15 @@
 "use strict";
 const { execFileSync } = require("node:child_process");
+const { windowsSystem32Binary } = require("./identity.cjs");
 
 /** 用 EncodedCommand 避免 powershell -Command 再吃一层反斜杠。 */
 function encodePowerShell(script) {
   return Buffer.from(String(script), "utf16le").toString("base64");
 }
 
-function runPowerShell(script, { timeout = 15000 } = {}) {
+function runPowerShell(script, { timeout = 15000, env } = {}) {
   return execFileSync(
-    "powershell.exe",
+    windowsSystem32Binary("powershell.exe"),
     [
       "-NoProfile",
       "-NonInteractive",
@@ -17,7 +18,7 @@ function runPowerShell(script, { timeout = 15000 } = {}) {
       "-EncodedCommand",
       encodePowerShell(`$ProgressPreference = 'SilentlyContinue'; ${script}`),
     ],
-    { encoding: "utf8", windowsHide: true, timeout },
+    { encoding: "utf8", windowsHide: true, timeout, env: env || process.env },
   );
 }
 

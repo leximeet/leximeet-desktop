@@ -1,6 +1,8 @@
 "use strict";
 const { execFileSync } = require("node:child_process");
 const { runPowerShell } = require("./powershell.cjs");
+const { powershellQuote } = require("./shell-quote.cjs");
+const { windowsSystem32Binary } = require("./identity.cjs");
 
 function parsePids(text) {
   return String(text || "")
@@ -35,14 +37,9 @@ function posixDirectChildren(pid) {
 
 function windowsDirectChildren(pid) {
   const filter = `ParentProcessId=${pid}`;
-  const script = `(Get-CimInstance -ClassName Win32_Process -Filter ${JSON.stringify(filter)}).ProcessId`;
+  const script = `(Get-CimInstance -ClassName Win32_Process -Filter ${powershellQuote(filter)}).ProcessId`;
   try {
-    const output = execFileSync(
-      "powershell.exe",
-      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
-      { encoding: "utf8", windowsHide: true, timeout: 15000 },
-    );
-    return parsePids(output);
+    return parsePids(runPowerShell(script));
   } catch {
     return [];
   }
@@ -99,7 +96,7 @@ function windowsTaskkill(pid, force) {
   const args = ["/PID", String(pid), "/T"];
   if (force) args.push("/F");
   try {
-    execFileSync("taskkill", args, {
+    execFileSync(windowsSystem32Binary("taskkill.exe"), args, {
       encoding: "utf8",
       windowsHide: true,
       timeout: 15000,
@@ -112,7 +109,7 @@ function windowsTaskkill(pid, force) {
 /** Windows 上 Node 跟踪的 PID 可能不是真正持锁的 JVM；只匹配本实例资料目录的命令行。 */
 function windowsCommandLineQuery(needle) {
   return [
-    `$n = ${JSON.stringify(String(needle))}`,
+    `$n = ${powershellQuote(String(needle))}`,
     // 先按映像名缩小，避免全量 CIM 把 java 的 CommandLine 读丢或超时。
     `$procs = Get-CimInstance -ClassName Win32_Process -Filter "Name='java.exe' OR Name='javaw.exe' OR Name='node.exe'"`,
     `$procs | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($n) } | ForEach-Object { $_.ProcessId }`,

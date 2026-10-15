@@ -97,6 +97,7 @@ function runNativeHost({
     socket.on("close", () => finish());
     return { close: finish, socket };
   } catch (error) {
+    if (error?.message) diagnostic.write(`${error.message}\n`);
     finish(
       ["SOURCE_REJECTED", "UNSAFE_SOCKET", "UNSAFE_PRIVATE_PATH"].includes(error.message)
         ? error.message

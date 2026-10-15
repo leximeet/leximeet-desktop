@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 const { browserUserDataDir } = require("./app-paths.cjs");
+const { windowsSystem32Binary } = require("./identity.cjs");
 
 const HOST_NAME = /^[a-z0-9_]+(?:\.[a-z0-9_]+)+$/;
 
@@ -14,34 +15,30 @@ function registryKey(browser, hostName) {
   return `${hive}\\${hostName}`;
 }
 
+function runReg(args) {
+  return execFileSync(windowsSystem32Binary("reg.exe"), args, {
+    windowsHide: true,
+    encoding: "utf8",
+    timeout: 10000,
+  });
+}
+
 function writeRegistryValue(key, value) {
   for (const view of ["32", "64"]) {
-    execFileSync("reg", ["add", key, "/ve", "/t", "REG_SZ", "/d", value, "/f", `/reg:${view}`], {
-      windowsHide: true,
-      encoding: "utf8",
-      timeout: 10000,
-    });
+    runReg(["add", key, "/ve", "/t", "REG_SZ", "/d", value, "/f", `/reg:${view}`]);
   }
 }
 
 function readRegistryValue(key) {
   try {
-    const out = execFileSync("reg", ["query", key, "/ve", "/reg:32"], {
-      windowsHide: true,
-      encoding: "utf8",
-      timeout: 10000,
-    });
+    const out = runReg(["query", key, "/ve", "/reg:32"]);
     const match = /REG_SZ\s+(.+)$/m.exec(out);
     if (match) return match[1].trim();
   } catch {
     /* 再查 64 位视图 */
   }
   try {
-    const out = execFileSync("reg", ["query", key, "/ve", "/reg:64"], {
-      windowsHide: true,
-      encoding: "utf8",
-      timeout: 10000,
-    });
+    const out = runReg(["query", key, "/ve", "/reg:64"]);
     const match = /REG_SZ\s+(.+)$/m.exec(out);
     if (match) return match[1].trim();
   } catch {
@@ -53,11 +50,7 @@ function readRegistryValue(key) {
 function removeRegistryValue(key) {
   for (const view of ["32", "64"]) {
     try {
-      execFileSync("reg", ["delete", key, "/f", `/reg:${view}`], {
-        windowsHide: true,
-        encoding: "utf8",
-        timeout: 10000,
-      });
+      runReg(["delete", key, "/f", `/reg:${view}`]);
     } catch {
       /* 键不存在 */
     }

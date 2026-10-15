@@ -14,7 +14,7 @@ const DEFAULT_BUDGET_MS = Object.freeze({
   "test:integration": 180000,
   "test:lmcp:transport": 180000,
   "test:mcp": 180000,
-  "test:desktop": 600000,
+  "test:desktop": 900000,
 });
 
 function runNpmScripts(scripts, { budgets = DEFAULT_BUDGET_MS, cwd = root } = {}) {

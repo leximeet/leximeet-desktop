@@ -32,6 +32,12 @@ runs:
         key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
         restore-keys: |
           electron-${{ runner.os }}-${{ runner.arch }}-
+    - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: .runtime/dictionary-source
+        key: dictionary-source-${{ hashFiles('electron/services/text-dictionary-index.cjs') }}
+        restore-keys: |
+          dictionary-source-
     - name: npm ci
       if: ${{ inputs.npm-ci == 'true' }}
       shell: bash

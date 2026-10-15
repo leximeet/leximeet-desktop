@@ -2,7 +2,10 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { DEFAULT_BUDGET_MS } = require("../../scripts/lib/run-npm-gate.cjs");
-const { dumpProcessTree } = require("../../scripts/lib/dump-process-tree.cjs");
+const {
+  dumpProcessTree,
+  WINDOWS_PROCESS_TREE_SCRIPT,
+} = require("../../scripts/lib/dump-process-tree.cjs");
 
 test("门禁脚本都有单步超时，避免静默挂死", () => {
   for (const script of [
@@ -16,6 +19,12 @@ test("门禁脚本都有单步超时，避免静默挂死", () => {
     assert.ok(DEFAULT_BUDGET_MS[script] > 0, script);
   }
   assert.ok(DEFAULT_BUDGET_MS["test:integration"] <= 180000);
+  assert.equal(DEFAULT_BUDGET_MS["test:desktop"], 900000);
+});
+
+test("Windows 进程树诊断带 ParentProcessId", () => {
+  assert.match(WINDOWS_PROCESS_TREE_SCRIPT, /ParentProcessId/);
+  assert.match(WINDOWS_PROCESS_TREE_SCRIPT, /ProcessId/);
 });
 
 test("进程树诊断失败时不抛，只写 stderr", () => {

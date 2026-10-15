@@ -21,6 +21,11 @@ const { buildNativeHost } = require("../../scripts/lmcp/build-host.cjs");
 const { startFocusMonitor } = require("../helpers/macos-focus-monitor.cjs");
 const { electronBinary } = require("../helpers/electron-binary.cjs");
 const { isolatedProfile } = require("../helpers/isolated-profile.cjs");
+const {
+  uniqueTestHostName,
+  cleanupNativeRegistration,
+  forgetSharedTestHost,
+} = require("../helpers/native-host-fixture.cjs");
 
 const project = path.resolve(__dirname, "../..");
 const electron = electronBinary();
@@ -135,9 +140,8 @@ async function fixture(t, options = {}) {
           "回收本次隔离资料根的空Socket目录",
         );
       }
-      if (registration && fs.existsSync(registration.recordPath))
-        unregisterNativeHost(registration);
     } finally {
+      cleanupNativeRegistration(registration);
       fs.rmSync(root, { recursive: true, force: true });
       if (focus) {
         const report = await focus.stop();
@@ -159,6 +163,7 @@ async function fixture(t, options = {}) {
         outputDir: path.join(root, "packaged-resources", "native-host"),
       }).hostScript
     : script;
+  forgetSharedTestHost();
   registration = registerNativeHost({
     extensionId: "a".repeat(32),
     browserDataDir: path.join(root, "browser"),
@@ -167,7 +172,7 @@ async function fixture(t, options = {}) {
     hostScript,
     profileName: "test",
     isolated: true,
-    hostName: "org.leximeet.browser.test",
+    hostName: uniqueTestHostName(),
   });
   function browser(caller = origin) {
     // PATH 没有 Node；NODE_OPTIONS 注入会被安装器生成的 launcher 清除。

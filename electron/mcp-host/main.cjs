@@ -175,6 +175,7 @@ function runMcpShim({
       if (!/^[a-f0-9]{64}$/.test(descriptor.token || "")) throw new Error("SOURCE_REJECTED");
       return descriptor;
     } catch (error) {
+      if (error?.message) diagnostic.write(`${error.message}\n`);
       const code = ["SOURCE_REJECTED", "UNSAFE_SOCKET"].includes(error.message)
         ? error.message
         : "HOST_UNAVAILABLE";

@@ -1,4 +1,5 @@
 "use strict";
+const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { createHash } = require("node:crypto");
@@ -20,25 +21,24 @@ function currentUserKey(platform = process.platform) {
   return createHash("sha256").update(currentUsername()).digest("hex").slice(0, 8);
 }
 
-function windowsWhoami(args = []) {
+/** 固定 %SystemRoot%\System32，不依赖 PATH，也不在测试里补 PATH。 */
+function windowsSystem32Binary(name) {
+  const file = String(name).toLowerCase().endsWith(".exe") ? name : `${name}.exe`;
   const roots = [process.env.SystemRoot, process.env.WINDIR, "C:\\Windows"].filter(Boolean);
-  const binaries = [
-    ...roots.map((root) => path.join(root, "System32", "whoami.exe")),
-    "whoami.exe",
-  ];
-  let last;
-  for (const binary of binaries) {
-    try {
-      return execFileSync(binary, args, {
-        encoding: "utf8",
-        windowsHide: true,
-        timeout: 5000,
-      });
-    } catch (error) {
-      last = error;
-    }
+  const candidates = roots.map((root) => path.join(root, "System32", file));
+  if (process.platform !== "win32") return candidates[0];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
   }
-  throw last || new Error("whoami");
+  throw new Error(`WINDOWS_SYSTEM32_MISSING:${file}`);
+}
+
+function windowsWhoami(args = []) {
+  return execFileSync(windowsSystem32Binary("whoami.exe"), args, {
+    encoding: "utf8",
+    windowsHide: true,
+    timeout: 5000,
+  });
 }
 
 function currentWindowsSid() {
@@ -65,4 +65,5 @@ module.exports = {
   currentUserKey,
   currentWindowsSid,
   currentWindowsAccount,
+  windowsSystem32Binary,
 };

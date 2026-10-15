@@ -99,6 +99,24 @@ function connectEndpoint(descriptor) {
   return net.connect(parsed.path);
 }
 
+/** Node 默认 DACL 仍给 Everyone / 匿名读权限，不是独占；失败必须关闭监听。 */
+async function applyNamedPipeAcl(server, location, tightenPipe) {
+  try {
+    tightenPipe(location);
+  } catch (error) {
+    await new Promise((resolve) => {
+      try {
+        server.close(() => resolve());
+      } catch {
+        resolve();
+      }
+    });
+    const failed = new Error("NAMED_PIPE_ACL_FAILED");
+    failed.cause = error;
+    throw failed;
+  }
+}
+
 async function listenTransport({
   purpose,
   profileRoot,
@@ -118,13 +136,7 @@ async function listenTransport({
       server.once("error", reject);
       server.listen({ path: location, readableAll: false, writableAll: false }, resolve);
     });
-    try {
-      tightenPipe(location);
-    } catch (error) {
-      // Node listen 已用 readableAll/writableAll=false 排除 Everyone；
-      // Win32 再收紧失败时不能拆掉已监听管道，否则 MCP 描述符永远写不出。
-      console.error(`命名管道 ACL 收紧失败，沿用 Node 默认独占 DACL：${error.message}`);
-    }
+    await applyNamedPipeAcl(server, location, tightenPipe);
   } else {
     const names = bindName({ purpose, profileRoot, instanceId, platform });
     ensurePrivateDirectory(names.base);
@@ -179,5 +191,6 @@ module.exports = {
   describeTransport,
   assertSafeEndpoint,
   connectEndpoint,
+  applyNamedPipeAcl,
   listenTransport,
 };

@@ -21,34 +21,17 @@ function sleep(ms) {
 async function downloadOnce(url, destination) {
   const temporary = `${destination}.download`;
   try {
-    let received = false;
-    for (const proxy of [null, "http://127.0.0.1:7897", "http://127.0.0.1:12334"]) {
-      // Node 原生 fetch 不自动使用用户的代理变量；curl 提供一致的直连与代理回退。
-      const status = await new Promise((resolve, reject) => {
-        const child = spawn(
-          "curl",
-          [
-            "-fL",
-            "--connect-timeout",
-            "10",
-            "--max-time",
-            "240",
-            ...(proxy ? ["--proxy", proxy] : []),
-            url,
-            "-o",
-            temporary,
-          ],
-          { stdio: "inherit" },
-        );
-        child.once("error", reject);
-        child.once("exit", resolve);
-      });
-      if (status === 0) {
-        received = true;
-        break;
-      }
-    }
-    if (!received) throw new Error("词典下载失败，请检查网络或代理");
+    // 只走当前 HTTPS；失败由外层重试，不回退本机代理端口。
+    const status = await new Promise((resolve, reject) => {
+      const child = spawn(
+        "curl",
+        ["-fL", "--connect-timeout", "10", "--max-time", "240", url, "-o", temporary],
+        { stdio: "inherit" },
+      );
+      child.once("error", reject);
+      child.once("exit", resolve);
+    });
+    if (status !== 0) throw new Error("词典下载失败，请检查网络");
     fs.renameSync(temporary, destination);
   } finally {
     fs.rmSync(temporary, { force: true });

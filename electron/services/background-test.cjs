@@ -92,7 +92,7 @@ function installBackgroundTest({ app, shell, dialog, env, platform = process.pla
         note(`host.${method}`);
         // Electron 未处理拒绝会回调 showErrorBox；再抛会二次崩溃，描述符永远写不出。
         if (method === "showErrorBox") {
-          console.error(`后台测试捕获 showErrorBox：${args[0] || ""}\n${args[1] || ""}`);
+          console.error(`后台测试捕获 showErrorBox：${args[0] || ""}\n原始错误：${args[1] || ""}`);
           violation("showErrorBox", 0);
           return;
         }

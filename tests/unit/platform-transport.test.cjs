@@ -9,6 +9,7 @@ const {
   parseDescriptor,
   describeTransport,
   listenTransport,
+  applyNamedPipeAcl,
   connectEndpoint,
   assertSafeEndpoint,
   bindName,
@@ -98,10 +99,36 @@ test("管道名只用短 ASCII，避免中文用户名超长", () => {
   assert.equal(transportKind("linux"), "uds");
 });
 
+test("命名管道 ACL 收紧失败则关闭监听并启动失败", async () => {
+  let closed = false;
+  const server = {
+    close(done) {
+      closed = true;
+      if (done) done();
+    },
+  };
+  await assert.rejects(
+    () =>
+      applyNamedPipeAcl(server, "\\\\.\\pipe\\leximeet-test", () => {
+        throw new Error("Restrict boom");
+      }),
+    (error) => {
+      assert.equal(error.message, "NAMED_PIPE_ACL_FAILED");
+      assert.equal(error.cause?.message, "Restrict boom");
+      return true;
+    },
+  );
+  assert.equal(closed, true);
+});
+
 test(
-  "Windows 命名管道 listen 后写出端点，ACL 收紧失败不拆掉管道",
+  "Windows 命名管道 listen 后 DACL 只有当前用户和 SYSTEM",
   { timeout: 20000, skip: process.platform !== "win32" },
   async (t) => {
+    const {
+      inspectNamedPipe,
+      assertNamedPipeExclusive,
+    } = require("../../electron/services/platform/win32-acl.cjs");
     const profileRoot = fs.mkdtempSync(path.join(os.tmpdir(), "leximeet-pipe-acl-"));
     t.after(() => fs.rmSync(profileRoot, { recursive: true, force: true }));
     const listened = await listenTransport({
@@ -112,6 +139,10 @@ test(
     t.after(() => listened.close());
     assert.equal(listened.kind, "named-pipe");
     assert.match(listened.path, /^\\\\[.]\\pipe\\leximeet-mcp-/);
+    const sddl = inspectNamedPipe(listened.path);
+    const checked = assertNamedPipeExclusive(sddl);
+    assert.match(checked.sddl, /S-1-5-/);
+    assert.doesNotMatch(checked.sddl, /S-1-1-0|S-1-5-7|S-1-5-11|S-1-5-32-545/);
   },
 );
 

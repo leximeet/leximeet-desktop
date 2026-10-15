@@ -163,7 +163,15 @@ test("showErrorBox 只记录不抛，避免 Electron 异常处理器二次崩溃
     env: { LEXIMEET_PROFILE: "test", LEXIMEET_TEST_SILENT: "1" },
     platform: "linux",
   });
-  assert.doesNotThrow(() => dialog.showErrorBox("启动失败", "本机核心无法启动"));
+  const lines = [];
+  const originalError = console.error;
+  console.error = (...args) => lines.push(args.join(" "));
+  try {
+    assert.doesNotThrow(() => dialog.showErrorBox("启动失败", "本机核心无法启动"));
+    assert.match(lines.join("\n"), /原始错误：本机核心无法启动/);
+  } finally {
+    console.error = originalError;
+  }
   assert.equal(guard.snapshot().blocked["host.showErrorBox"], 1);
   assert.equal(
     guard.snapshot().violations.some((item) => item.kind === "showErrorBox"),

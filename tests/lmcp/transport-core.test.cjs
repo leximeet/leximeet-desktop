@@ -12,13 +12,15 @@ const { LmcpGateway } = require("../../electron/services/lmcp/gateway.cjs");
 const {
   PluginCaptureNotifications,
 } = require("../../electron/services/plugin-capture-notifications.cjs");
-const {
-  registerNativeHost,
-  unregisterNativeHost,
-} = require("../../electron/services/lmcp/native-registration.cjs");
+const { registerNativeHost } = require("../../electron/services/lmcp/native-registration.cjs");
 const { FrameDecoder, encodeFrame } = require("../../electron/services/lmcp/framing.cjs");
 const { startFocusMonitor } = require("../helpers/macos-focus-monitor.cjs");
 const { isolatedProfile } = require("../helpers/isolated-profile.cjs");
+const {
+  uniqueTestHostName,
+  cleanupNativeRegistration,
+  forgetSharedTestHost,
+} = require("../helpers/native-host-fixture.cjs");
 const project = path.resolve(__dirname, "../..");
 
 // 真实 Java/Core SQLite + Main 私有 HTTP + UDS + 独立 Host；浏览器端仅模拟 stdio 客户端。
@@ -94,9 +96,8 @@ test("真实Core贯通1.0.0配对/采集幂等/桌面投影/重启恢复/撤权"
       await gateway.close();
       await dictionary.close();
       await runtime.stop();
-      if (registration && fs.existsSync(registration.recordPath))
-        unregisterNativeHost(registration);
     } finally {
+      cleanupNativeRegistration(registration);
       fs.rmSync(root, { recursive: true, force: true });
       if (focus) {
         const report = await focus.stop();
@@ -115,6 +116,7 @@ test("真实Core贯通1.0.0配对/采集幂等/桌面投影/重启恢复/撤权"
   focus.track(runtime.child.pid);
   await dictionary.ensure();
   await gateway.start();
+  forgetSharedTestHost();
   registration = registerNativeHost({
     extensionId: "a".repeat(32),
     browserDataDir: path.join(root, "browser"),
@@ -123,7 +125,7 @@ test("真实Core贯通1.0.0配对/采集幂等/桌面投影/重启恢复/撤权"
     hostScript: path.join(project, "electron", "native-host", "main.cjs"),
     profileName: "test",
     isolated: true,
-    hostName: "org.leximeet.browser.test",
+    hostName: uniqueTestHostName(),
   });
   const connect = () => {
     const child = spawn(registration.launcher, [origin], {
