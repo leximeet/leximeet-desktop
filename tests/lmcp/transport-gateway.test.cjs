@@ -252,32 +252,54 @@ test(
       },
     };
     const f = await fixture(t, { core, maxConnections: 2, cleanupTimeoutMs: 15 });
-    for (let i = 0; i < 2; i++) {
-      const client = await f.client();
-      client.send("hello");
-      assert.equal((await client.next()).ok, true);
-      const closed = new Promise((resolve) => client.socket.once("close", resolve));
-      client.socket.destroy();
-      await closed;
-      const deadline = Date.now() + 500;
-      while (f.gateway.status().socketCount > 0 && Date.now() < deadline) await delay(20);
-      f.gateway.reapDeadSockets();
-      if (i === 0) {
-        const reused = await f.client(client.connectionId);
-        const rejected = new Promise((resolve) => reused.socket.once("close", resolve));
-        reused.send("hello");
-        await rejected;
-        assert.equal(cleanupCalls, 1);
+    const openClient = async (connectionId) => {
+      let last;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          return await f.client(connectionId);
+        } catch (error) {
+          last = error;
+          console.error(`openClient attempt=${attempt} ${error.message}`);
+          if (!String(error.message).startsWith("socket-closed-before") || attempt === 2)
+            throw error;
+          await delay(100);
+        }
       }
+      throw last;
+    };
+    try {
+      for (let i = 0; i < 2; i++) {
+        const client = await openClient();
+        client.send("hello");
+        const hello = await client.next();
+        assert.equal(hello.ok, true, `hello #${i} ${JSON.stringify(hello)}`);
+        const closed = new Promise((resolve) => client.socket.once("close", resolve));
+        client.socket.destroy();
+        await closed;
+        const deadline = Date.now() + 500;
+        while (f.gateway.status().socketCount > 0 && Date.now() < deadline) await delay(20);
+        f.gateway.reapDeadSockets();
+        await delay(process.platform === "win32" ? 100 : 20);
+        if (i === 0) {
+          const reused = await openClient(client.connectionId);
+          const rejected = new Promise((resolve) => reused.socket.once("close", resolve));
+          reused.send("hello");
+          await rejected;
+          assert.equal(cleanupCalls, 1, "first cleanup occupies the old id");
+        }
+      }
+      assert.equal(cleanupCalls, 2, `cleanupCalls=${cleanupCalls}`);
+      assert.equal(f.gateway.status().cleanupPendingCount, 2);
+      const extra = await openClient();
+      const closed = new Promise((resolve) => extra.socket.once("close", resolve));
+      extra.send("hello");
+      await closed;
+      assert.equal(cleanupCalls, 2);
+      assert.equal(f.gateway.status().connections.length, 0);
+    } catch (error) {
+      console.error(`lifecycle-slots: ${error.stack || error.message}`);
+      throw error;
     }
-    assert.equal(cleanupCalls, 2);
-    assert.equal(f.gateway.status().cleanupPendingCount, 2);
-    const extra = await f.client();
-    const closed = new Promise((resolve) => extra.socket.once("close", resolve));
-    extra.send("hello");
-    await closed;
-    assert.equal(cleanupCalls, 2);
-    assert.equal(f.gateway.status().connections.length, 0);
   },
 );
 
