@@ -42,7 +42,13 @@ async function fixture(t, options) {
     decoder.on("error", () => socket.destroy());
     socket.on("data", (data) => decoder.push(data));
     socket.on("error", () => {});
-    await new Promise((resolve) => socket.once("connect", resolve));
+    socket.on("close", () => {
+      while (waiting.length) waiting.shift()({ kind: "closed" });
+    });
+    await new Promise((resolve, reject) => {
+      socket.once("connect", resolve);
+      socket.once("close", () => reject(new Error("socket-closed-before-connect")));
+    });
     const next = () =>
       inbox.length
         ? Promise.resolve(inbox.shift())
@@ -50,7 +56,9 @@ async function fixture(t, options) {
     socket.write(
       encodeFrame({ kind: "transport-auth", token: descriptor.token, extensionOrigin: origin }),
     );
-    assert.equal((await next()).kind, "transport-ready");
+    const ready = await next();
+    if (ready.kind === "closed") throw new Error("socket-closed-before-ready");
+    assert.equal(ready.kind, "transport-ready");
     return {
       socket,
       next,
@@ -218,50 +226,54 @@ test("设置页管理调用在Core未就绪时有界，超时不释放真实并�
   assert.equal(f.gateway.status().activeRequests, 0);
 });
 
-test("未确认断线清理占生命周期槽，禁止旧ID复用且后台清理数量有界", async (t) => {
-  let cleanupCalls = 0;
-  const core = {
-    async request(endpoint, _, { envelope }) {
-      if (endpoint.endsWith("manage")) {
-        cleanupCalls++;
-        return new Promise(() => {});
+test(
+  "未确认断线清理占生命周期槽，禁止旧ID复用且后台清理数量有界",
+  { timeout: 15000 },
+  async (t) => {
+    let cleanupCalls = 0;
+    const core = {
+      async request(endpoint, _, { envelope }) {
+        if (endpoint.endsWith("manage")) {
+          cleanupCalls++;
+          return new Promise(() => {});
+        }
+        return {
+          apiVersion: "1.0.0",
+          requestId: envelope.requestId,
+          connectionId: envelope.connectionId,
+          method: envelope.method,
+          ok: true,
+          result: {},
+        };
+      },
+    };
+    const f = await fixture(t, { core, maxConnections: 2, cleanupTimeoutMs: 15 });
+    for (let i = 0; i < 2; i++) {
+      const client = await f.client();
+      client.send("hello");
+      assert.equal((await client.next()).ok, true);
+      const closed = new Promise((resolve) => client.socket.once("close", resolve));
+      client.socket.destroy();
+      await closed;
+      await delay(20);
+      if (i === 0) {
+        const reused = await f.client(client.connectionId);
+        const rejected = new Promise((resolve) => reused.socket.once("close", resolve));
+        reused.send("hello");
+        await rejected;
+        assert.equal(cleanupCalls, 1);
       }
-      return {
-        apiVersion: "1.0.0",
-        requestId: envelope.requestId,
-        connectionId: envelope.connectionId,
-        method: envelope.method,
-        ok: true,
-        result: {},
-      };
-    },
-  };
-  const f = await fixture(t, { core, maxConnections: 2, cleanupTimeoutMs: 15 });
-  for (let i = 0; i < 2; i++) {
-    const client = await f.client();
-    client.send("hello");
-    assert.equal((await client.next()).ok, true);
-    const closed = new Promise((resolve) => client.socket.once("close", resolve));
-    client.socket.destroy();
-    await closed;
-    await delay(20);
-    if (i === 0) {
-      const reused = await f.client(client.connectionId);
-      const rejected = new Promise((resolve) => reused.socket.once("close", resolve));
-      reused.send("hello");
-      await rejected;
-      assert.equal(cleanupCalls, 1);
     }
-  }
-  assert.equal(cleanupCalls, 2);
-  assert.equal(f.gateway.status().cleanupPendingCount, 2);
-  const extra = await f.client();
-  const closed = new Promise((resolve) => extra.socket.once("close", resolve));
-  extra.send("hello");
-  await closed;
-  assert.equal(cleanupCalls, 2);
-  assert.equal(f.gateway.status().connections.length, 0);
-});
+    assert.equal(cleanupCalls, 2);
+    assert.equal(f.gateway.status().cleanupPendingCount, 2);
+    const extra = await f.client();
+    const closed = new Promise((resolve) => extra.socket.once("close", resolve));
+    extra.send("hello");
+    await closed;
+    assert.equal(cleanupCalls, 2);
+    assert.equal(f.gateway.status().connections.length, 0);
+  },
+);
 
 function response(envelope, result) {
   return {

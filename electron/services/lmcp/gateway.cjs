@@ -270,6 +270,10 @@ class LmcpGateway {
     }
   }
   accept(socket) {
+    // Windows 命名管道上客户端 destroy 后，服务端 close 可能晚到，已销毁套接字仍占槽。
+    for (const client of [...this.sockets]) {
+      if (client.socket.destroyed) this.sockets.delete(client);
+    }
     if (this.closing || this.sockets.size >= this.maxConnections) {
       socket.destroy();
       return;
