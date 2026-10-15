@@ -19,6 +19,7 @@ test("门禁脚本都有单步超时，避免静默挂死", () => {
     assert.ok(DEFAULT_BUDGET_MS[script] > 0, script);
   }
   assert.ok(DEFAULT_BUDGET_MS["test:integration"] <= 180000);
+  assert.equal(DEFAULT_BUDGET_MS["test:lmcp:transport"], 300000);
   assert.equal(DEFAULT_BUDGET_MS["test:desktop"], 900000);
 });
 
