@@ -78,10 +78,16 @@ test(
       homeDir: home,
       awaitReady: async () => {},
     });
+    const settle = (work, ms = 3000) =>
+      Promise.race([work().catch(() => {}), new Promise((resolve) => setTimeout(resolve, ms))]);
     t.after(async () => {
-      await gateway.close();
-      await runtime.stop();
-      fs.rmSync(root, { recursive: true, force: true });
+      await settle(() => gateway.close());
+      await settle(() => runtime.stop());
+      try {
+        fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+      } catch (error) {
+        if (!error || !["EPERM", "EBUSY", "ENOENT"].includes(error.code)) throw error;
+      }
     });
     await runtime.start();
     await gateway.start();
@@ -103,11 +109,23 @@ test(
       },
     });
     const client = new Client({ name: "leximeet-e2e", version: "1.0.1" });
-    t.after(async () => {
-      await client.close().catch(() => {});
-      await transport.close?.().catch(() => {});
+    t.after(() =>
+      settle(async () => {
+        await client.close().catch(() => {});
+        await transport.close?.().catch(() => {});
+      }),
+    );
+    let stderr = "";
+    const connect = client.connect(transport);
+    transport.stderr?.on("data", (chunk) => {
+      stderr += chunk;
+      process.stderr.write(chunk);
     });
-    await client.connect(transport);
+    try {
+      await connect;
+    } catch (error) {
+      assert.fail(`MCP SDK 连接失败：${error.message}${stderr ? `\n${stderr}` : ""}`);
+    }
     const listed = await client.listTools();
     assert.equal(listed.tools.length, 4);
     assert.equal(listed.tools[0].name, "leximeet_help");
