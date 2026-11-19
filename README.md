@@ -8,14 +8,14 @@
     <a href="docs/插件连接.md">连接插件</a> ·
     <a href="CONTRIBUTING.md">参与贡献</a>
   </p>
-  <p><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only" /> <img src="https://img.shields.io/badge/version-1.0.0-teal" alt="1.0.0" /></p>
+  <p><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0-only" /> <img src="https://img.shields.io/badge/version-1.1.0-teal" alt="1.1.0" /></p>
 </div>
 
 词遇是本地优先的单词学习工作区。你可以保存阅读时遇见的真实语境，整理自己的词库，用六种练习积累熟悉度。连接浏览器插件后，网页查词和采集会使用桌面资料。
 
 [跟随截图完成一次使用](docs/操作演示.md)：设置目标、手动采集、保存笔记、多词本整理与六种练习。
 
-**已发布附件以对应 Release 为准**（[1.0.0](https://github.com/leximeet/leximeet-desktop/releases/tag/1.0.0) · [1.0.1](https://github.com/leximeet/leximeet-desktop/releases/tag/1.0.1)）。源码版本 1.0.2 增加 Windows x64 与 Linux x64，[发行说明](docs/版本/1.0.2.md)写明安装包、签名与 SmartScreen 边界；三端齐套验收后才打 1.0.2 标签。使用时无需账号；云登录与独立设备同步计划在 2.0.0 实现。
+**下载以 [GitHub Release](https://github.com/leximeet/leximeet-desktop/releases) 为准。** 1.1.0 增加 Windows x64 与 Linux x64 安装包，并在 macOS / Linux 支持词遇 IDEA 只读连接。[1.1.0 发行说明](docs/版本/1.1.0.md)列出安装包、签名和平台边界。使用时无需账号；云登录与独立设备同步计划在 2.0.0 实现。
 
 ![明亮主题：词库与语境](docs/screenshots/library-light.png)
 

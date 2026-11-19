@@ -40,6 +40,26 @@ function leximeetManifest(manifest) {
   );
 }
 
+function registrationFailure(browser, failure) {
+  const messages = {
+    UNSAFE_NATIVE_REGISTRATION_DIRECTORY: "浏览器登记目录的所有者或写入权限不安全，未改变原目录。",
+    UNSAFE_PRIVATE_PATH: "词遇本机通道的私有文件权限或路径异常，请检查通道配置。",
+    NATIVE_REGISTRATION_NOT_OWNED: "存在不属于当前词遇安装的同名通道，原文件已保留。",
+    NATIVE_REGISTRATION_CHANGED: "已有通道登记被修改，请检查或修复词遇通道。",
+    ELECTRON_RUN_AS_NODE_DISABLED: "当前安装包缺少本机通道运行能力，请更新桌面端。",
+    ELECTRON_FUSE_NOT_FOUND: "当前安装包的本机通道运行能力无法核验，请更新桌面端。",
+    EACCES: "当前用户没有创建通道的权限，请检查浏览器登记目录。",
+    EPERM: "当前用户没有创建通道的权限，请检查浏览器登记目录。",
+  };
+  const code = Object.hasOwn(messages, failure?.message)
+    ? failure.message
+    : Object.hasOwn(messages, failure?.code)
+      ? failure.code
+      : "NATIVE_REGISTRATION_FAILED";
+  // 只公开固定分类，不把系统异常中的路径、正文或传输凭据送到界面。
+  return `${browser === "chrome" ? "Chrome" : "Edge"} 通道未能自动启用：${messages[code] || "本机通道登记失败，请检查词遇安装。"} [${code}]`;
+}
+
 // 仅 local 安装扫描扩展清单；不读取浏览历史、网页内容、插件词库或账号。
 class BrowserDiscovery {
   constructor({
@@ -68,6 +88,7 @@ class BrowserDiscovery {
     if (this.running) return this.snapshot();
     this.running = true;
     const next = [];
+    const failures = [];
     try {
       for (const browser of ["chrome", "edge"]) {
         const root = browserUserDataDir(browser, {
@@ -108,12 +129,17 @@ class BrowserDiscovery {
           }
         }
         if (ids.size) {
-          await this.connectionSettings.registerDiscovered(browser, [...ids].sort());
-          next.push({ browser, count: ids.size });
+          try {
+            await this.connectionSettings.registerDiscovered(browser, [...ids].sort());
+            next.push({ browser, count: ids.size });
+          } catch (error) {
+            // 单个浏览器登记失败不能阻断另一个浏览器的正常连接。
+            failures.push(registrationFailure(browser, error));
+          }
         }
       }
       this.detected = next;
-      this.lastError = null;
+      this.lastError = failures.join("；") || null;
     } catch {
       // 外来 Native 注册不可覆盖；设置页提供诊断，不以探测失败打断本机学习。
       this.lastError = "浏览器通道未能自动启用，请检查插件安装或通道诊断。";

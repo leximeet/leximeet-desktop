@@ -80,3 +80,33 @@ test("外来注册失败只报告诊断，不覆盖或让学习启动失败", as
   };
   assert.match((await f.service.scan()).lastError, /未能自动启用/);
 });
+
+test("Chrome登记失败不阻断Edge，诊断保留固定原因而不泄露异常路径", async (t) => {
+  const f = fixture(t);
+  f.write(path.join(f.root, "Extensions", "a".repeat(32), "1.0.2_0/manifest.json"), manifest);
+  f.write(
+    path.join(
+      f.homeDir,
+      "Library/Application Support/Microsoft Edge/Default/Extensions",
+      "b".repeat(32),
+      "1.0.2_0/manifest.json",
+    ),
+    manifest,
+  );
+  f.service.connectionSettings.registerDiscovered = async (browser, ids) => {
+    f.calls.push([browser, ids]);
+    if (browser === "chrome") throw new Error("UNSAFE_NATIVE_REGISTRATION_DIRECTORY");
+  };
+  const result = await f.service.scan();
+  assert.deepEqual(result.detected, [{ browser: "edge", count: 1 }]);
+  assert.deepEqual(f.calls, [
+    ["chrome", ["a".repeat(32)]],
+    ["edge", ["b".repeat(32)]],
+  ]);
+  assert.match(result.lastError, /Chrome.*UNSAFE_NATIVE_REGISTRATION_DIRECTORY/);
+  assert.match(result.lastError, /目录/);
+  f.service.connectionSettings.registerDiscovered = async () => {
+    throw new Error("/private/user-data/never-show?token=fixture-secret");
+  };
+  assert.doesNotMatch((await f.service.scan()).lastError, /user-data|fixture-secret/);
+});

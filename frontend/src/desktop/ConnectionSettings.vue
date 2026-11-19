@@ -37,6 +37,9 @@ function live(client) {
       connection.businessReady,
   );
 }
+function isIdea(client) {
+  return client?.origin === "jetbrains://com.github.weilhuang.leximeetidea";
+}
 async function refresh() {
   const ticket = ++sequence;
   try {
@@ -57,10 +60,8 @@ async function perform(input) {
   try {
     await api.connectionSettings(input);
     if (disposed) return;
-    if (input.action === "requestConnection")
-      message.value = "邀请已发送，请在浏览器弹窗确认连接。";
-    if (input.action === "disconnect")
-      message.value = "已断开连接，插件将恢复原独立资料。桌面资料保留。";
+    // 邀请进度显示在插件行，确认后由同一份状态自然切换到当前连接。
+    if (input.action === "disconnect") message.value = "已断开连接，桌面资料保留。";
     if (input.action === "cancelInvitation") message.value = "已取消连接邀请。";
     confirmation.value = null;
     await refresh();
@@ -93,7 +94,7 @@ onBeforeUnmount(() => {
         }}</span
       >
     </div>
-    <p>网页查词与采集使用桌面资料，学习与管理在桌面端完成。</p>
+    <p>浏览器可查词和采集，IDEA 可在项目中查词。</p>
     <p class="error-banner" role="alert" v-if="error">{{ error }}</p>
     <p class="connection-feedback" role="status" v-if="message">
       {{ message }}
@@ -113,7 +114,8 @@ onBeforeUnmount(() => {
       <div class="connection-empty" v-if="!discovered.length">
         <Icon name="plug-connected" />
         <div>
-          <strong>等待插件出现</strong><small>安装词遇插件并打开浏览器，检测到后会主动提醒。</small>
+          <strong>等待插件出现</strong
+          ><small>打开词遇浏览器插件，或打开 IDEA 底部的词遇工具窗。</small>
         </div>
       </div>
       <article
@@ -126,8 +128,10 @@ onBeforeUnmount(() => {
           <strong>{{ client.displayName }}</strong
           ><small>{{
             client.invitation?.state === "pending"
-              ? "等待浏览器确认"
-              : "可以连接 · 原独立资料会保留"
+              ? "等待插件确认"
+              : isIdea(client)
+                ? "可以连接 · 只读词库与词卡"
+                : "可以连接 · 原独立资料会保留"
           }}</small>
         </div>
         <template v-if="client.invitation?.state === 'pending'">
@@ -190,7 +194,11 @@ onBeforeUnmount(() => {
           撤销授权
         </button>
         <div class="connection-confirm" v-if="confirmation?.pairingId === client.pairingId">
-          <span>撤销后需重新确认连接。已采集到桌面的资料保留。</span>
+          <span>{{
+            isIdea(client)
+              ? "撤销后，IDEA 必须重新确认才能查词。"
+              : "撤销后需重新确认连接。已采集到桌面的资料保留。"
+          }}</span>
           <div class="row">
             <button class="button small" :disabled="busy" @click="confirmation = null"> 取消</button
             ><button
@@ -212,7 +220,8 @@ onBeforeUnmount(() => {
     <details class="connection-explanation">
       <summary>连接与独立使用有什么区别？</summary>
       <p>
-        连接时，插件原资料在本机封存，网页采集写入桌面。在任一端断开后，插件恢复原资料，桌面保留采集。临时失联会等待重连。
+        浏览器连接后封存独立资料，网页采集写入桌面。明确断开后，浏览器恢复独立资料。IDEA
+        连接后可查看词汇与释义，断连时停止显示。
       </p>
     </details>
     <details
@@ -220,12 +229,14 @@ onBeforeUnmount(() => {
       v-if="
         state?.discovery?.lastError ||
         state?.transport?.lastError ||
+        state?.transport?.ideaDiscoveryError ||
         state?.notifications?.lastError
       "
     >
       <summary>连接诊断</summary>
       <p v-if="state?.discovery?.lastError">{{ state.discovery.lastError }}</p>
       <p v-if="state?.transport?.lastError">{{ state.transport.lastError }}</p>
+      <p v-if="state?.transport?.ideaDiscoveryError">{{ state.transport.ideaDiscoveryError }}</p>
       <p v-if="state?.notifications?.lastError">
         {{ state.notifications.lastError }}
       </p>

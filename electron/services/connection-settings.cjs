@@ -5,6 +5,7 @@ const {
   assertRegistrationOwnership,
 } = require("./lmcp/native-registration.cjs");
 const { browserUserDataDir } = require("./platform/app-paths.cjs");
+const { IDEA_ORIGIN } = require("./lmcp/idea-binding.cjs");
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SUPPORTED = new Set(["darwin", "linux", "win32"]);
 
@@ -53,6 +54,7 @@ class ConnectionSettings {
     if (
       input.action === "requestConnection" &&
       input.origin !== undefined &&
+      input.origin !== IDEA_ORIGIN &&
       !/^chrome-extension:\/\/[a-p]{32}\/?$/.test(input.origin)
     )
       throw new Error("插件来源无效");
@@ -104,6 +106,7 @@ class ConnectionSettings {
       transport: {
         running: status.running,
         lastError: status.lastError,
+        ideaDiscoveryError: status.ideaDiscoveryError,
         connections: status.connections,
       },
       registration: {

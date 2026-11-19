@@ -94,6 +94,8 @@ function writePrivateJson(file, value, { platform = process.platform } = {}) {
 }
 
 module.exports = {
+  assertNotReparse,
+  assertPosixPrivate,
   assertPrivate,
   ensurePrivateDirectory,
   readPrivateJson,

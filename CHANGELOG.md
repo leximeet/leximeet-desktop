@@ -2,11 +2,13 @@
 
 本文件记录面向使用者与贡献者的行为变化。1.0.0 本机正式构建与验收分别记录；发行说明与实际附件以对应 Release 为准。
 
-## [1.0.2] — 2026-10-14
+## [1.1.0] — 2026-11-20
 
 ### 新增
 
-- 在已验收的 macOS arm64 之外支持 Windows x64（NSIS）与 Linux x64（AppImage + deb）。三端安装包齐套并完成安装验收后才发 1.0.2。
+- 在 macOS arm64 之外支持 Windows x64（NSIS）与 Linux x64（AppImage + deb）。正式标签构建的三端安装包齐套并完成安装验收后才公开。
+- 增加 IDEA 只读连接。插件可在 macOS / Linux 发现桌面端，双端发起邀请并在 IDEA 确认。IDEA 可读取词库与词卡，Browser 仍使用原有通道。
+- IDEA 使用独立的同用户握手文件与随机密钥。Main 与 Core 均限制 IDEA 只能使用连接管理和词库读取方法。
 - Windows 本机通道改为命名管道 + 传输令牌 + 收紧 DACL；描述符增加 `leximeet.{lmcp,mcp}-transport/1`，旧 `*-uds/1` 继续当 UDS。
 - Windows MCP / Native Host 使用随包 PE stub 与 `.launch` 旁路，满足官方 MCP SDK `shell:false`。
 - Native Messaging 覆盖 HKCU（Chrome / Edge 的 32 与 64 位视图）以及 Linux 用户级清单目录。
@@ -15,6 +17,7 @@
 
 ### 修复
 
+- macOS / Linux 的浏览器共享宿主登记目录允许安全的 `0755`。词遇私有目录与凭据继续使用严格权限，不修改其他应用的登记。单个浏览器登记失败不再阻断另一个浏览器。
 - 私有路径检查允许 macOS `/tmp` → `/private/tmp`、`/var` → `/private/var` 系统前缀，不再把本机 UDS 与临时目录误判为不安全。
 - Windows / Linux 的 core-cross 门禁先准备随包 Core 词典；lint 检出 `core-java` 以便核对文档链接。
 - Windows 单元测试不再依赖 POSIX 进程组或 inode 替换；`test:unit` 为单例加上时限，避免挂死占用整次作业。

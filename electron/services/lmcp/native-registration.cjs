@@ -8,6 +8,12 @@ const {
   writePrivateJson,
   assertPrivate,
 } = require("./private-files.cjs");
+const {
+  assertRegistrationDirectory,
+  ensureRegistrationDirectory,
+  readRegistrationJson,
+  writeRegistrationJson,
+} = require("../platform/registration-files.cjs");
 const { writeNativeLauncher, findPeStub } = require("../platform/launcher.cjs");
 const {
   registryKey,
@@ -145,7 +151,7 @@ function registerNativeHost({
     if (!fs.existsSync(recordPath)) throw new Error("NATIVE_REGISTRATION_NOT_OWNED");
     assertRegistrationOwnership(readPrivateJson(recordPath));
   }
-  if (platform !== "win32") ensurePrivateDirectory(path.dirname(manifestPath));
+  if (platform !== "win32") ensureRegistrationDirectory(path.dirname(manifestPath));
   const origins = extensionIds.map((id) => `chrome-extension://${id}/`);
   const origin = origins[0];
   const manifest = {
@@ -175,7 +181,8 @@ function registerNativeHost({
         flag: "wx",
       });
       created.push(manifestPath);
-    } else writePrivateJson(manifestPath, manifest);
+    } else if (platform === "win32") writePrivateJson(manifestPath, manifest);
+    else writeRegistrationJson(manifestPath, manifest);
     if (platform === "win32") {
       const existing = readRegistryValue(registry);
       if (existing && path.resolve(existing) !== path.resolve(manifestPath))
@@ -244,11 +251,14 @@ function assertRegistrationOwnership(record) {
     if (!fs.existsSync(file)) throw new Error("NATIVE_REGISTRATION_CHANGED");
     let stat;
     try {
-      assertPrivate(path.dirname(file), { directory: true });
+      if (file === record.manifestPath && (record.platform || "darwin") !== "win32")
+        assertRegistrationDirectory(path.dirname(file));
+      else assertPrivate(path.dirname(file), { directory: true });
       stat = assertPrivate(file);
     } catch (error) {
       // Windows 上改写清单可能丢掉私有 ACL，与内容被改一样视为登记已变。
-      if (error.message === "UNSAFE_PRIVATE_PATH") throw new Error("NATIVE_REGISTRATION_CHANGED");
+      if (["UNSAFE_PRIVATE_PATH", "UNSAFE_NATIVE_REGISTRATION_DIRECTORY"].includes(error.message))
+        throw new Error("NATIVE_REGISTRATION_CHANGED");
       throw error;
     }
     const limit = file.endsWith(".exe") ? 1024 * 1024 : 65536;
@@ -259,7 +269,10 @@ function assertRegistrationOwnership(record) {
     )
       throw new Error("NATIVE_REGISTRATION_CHANGED");
   }
-  const manifest = readPrivateJson(record.manifestPath);
+  const manifest =
+    (record.platform || "darwin") === "win32"
+      ? readPrivateJson(record.manifestPath)
+      : readRegistrationJson(record.manifestPath);
   if (
     manifest.name !== record.hostName ||
     manifest.path !== record.launcher ||

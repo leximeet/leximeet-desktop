@@ -76,13 +76,13 @@ test("发布拒绝未安装、脏源码、错版本、错 Core 或缺失源码�
     assert.throws(() => validateCandidate(value));
   }
 });
-test("1.0.2 发布矩阵覆盖三端安装包，缺一端不能合并", async () => {
+test("发布矩阵覆盖三端安装包，缺一端不能合并", async () => {
   assert.deepEqual(expectedArtifacts("1.0.2", "win32", "x64"), ["LexiMeet-1.0.2-win-x64.exe"]);
   assert.deepEqual(expectedArtifacts("1.0.2", "linux", "x64"), [
     "LexiMeet-1.0.2-linux-x64.AppImage",
     "LexiMeet-1.0.2-linux-x64.deb",
   ]);
-  assert.throws(() => expectedArtifacts("1.0.2", "linux", "arm64"), /不在 1.0.2 发布矩阵/);
+  assert.throws(() => expectedArtifacts("1.0.2", "linux", "arm64"), /不在发布矩阵/);
   const commit = "a".repeat(40),
     coreCommit = "b".repeat(40),
     hash = "c".repeat(64);

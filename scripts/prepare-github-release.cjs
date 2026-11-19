@@ -37,7 +37,7 @@ function matrixEntry(platform, arch) {
 
 function expectedArtifacts(tag, platform, arch) {
   const entry = matrixEntry(platform, arch);
-  if (!entry) throw new Error("不在 1.0.2 发布矩阵内的平台");
+  if (!entry) throw new Error("不在发布矩阵内的平台");
   return entry.artifacts(tag);
 }
 
@@ -58,8 +58,7 @@ function validateCandidate({ tag, commit, coreCommit, metadata, manifest, source
     manifest.sources?.core?.dirty !== false
   )
     throw new Error("安装包不是本标签对应的干净 Desktop/Core 源码");
-  if (!matrixEntry(metadata.platform, metadata.arch))
-    throw new Error("不在 1.0.2 发布矩阵内的平台");
+  if (!matrixEntry(metadata.platform, metadata.arch)) throw new Error("不在发布矩阵内的平台");
   if (
     manifest.platform !== metadata.platform ||
     manifest.arch !== metadata.arch ||
@@ -269,7 +268,7 @@ function writeUpdateFeed(output, tag, artifacts) {
 
 async function merge(inputs, output, tag = process.env.GITHUB_REF_NAME) {
   if (!Array.isArray(inputs) || inputs.length !== RELEASE_MATRIX.length)
-    throw new Error("1.0.2 必须三端齐套后才能合并发行附件");
+    throw new Error("必须三端齐套后才能合并发行附件");
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.mkdirSync(output, { recursive: true });
   const commit = git("rev-parse", "HEAD");

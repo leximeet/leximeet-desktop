@@ -2,7 +2,7 @@
 
 1.0.1 起，词遇桌面可以把本机词典、单词本和学习进度提供给 **Cursor、Codex、Claude Code**。功能名叫「AI 助手连接」，使用官方 [Model Context Protocol](https://modelcontextprotocol.io/)，和浏览器插件用的 **LMCP** 不是同一套协议。
 
-1.0.2 起支持 **macOS arm64、Windows x64、Linux x64**。Windsurf、Claude Desktop、VS Code 以及 Firefox 不在本版范围。
+1.1.0 起支持 **macOS arm64、Windows x64、Linux x64**。Windsurf、Claude Desktop、VS Code 以及 Firefox 不在本版范围。
 
 ## 和 LMCP 的区别
 

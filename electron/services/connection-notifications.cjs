@@ -1,5 +1,6 @@
 "use strict";
 const { NOTIFICATION_ICON } = require("./notification-icon.cjs");
+const { IDEA_ORIGIN } = require("./lmcp/idea-binding.cjs");
 
 // 系统通知只展示设备名与明确用户操作，不包含配对凭据、账号或资料。
 class ConnectionNotifications {
@@ -33,10 +34,13 @@ class ConnectionNotifications {
         !item.revoked,
     );
     if (pairing?.connectionState === "connected") return;
+    const idea = client.origin === IDEA_ORIGIN;
     this.issue(
       `discovered:${key}`,
-      "发现词遇浏览器插件",
-      "点击发送连接邀请，在浏览器确认后即可使用桌面词库。",
+      idea ? "发现词遇 IDEA 插件" : "发现词遇浏览器插件",
+      idea
+        ? "点击发送连接邀请，在 IDEA 确认后即可查阅桌面词库。"
+        : "点击发送连接邀请，在浏览器确认后即可使用桌面词库。",
       async () => {
         await this.gateway.manage({
           action: "requestConnection",
@@ -55,7 +59,9 @@ class ConnectionNotifications {
     this.issue(
       `connected:${key}`,
       "插件连接成功",
-      "网页查词与采集已使用这台桌面端。两端均可断开连接。",
+      client.origin === IDEA_ORIGIN
+        ? "IDEA 已可查阅桌面词库。两端均可断开连接。"
+        : "网页查词与采集已使用这台桌面端。两端均可断开连接。",
     );
     this.changed();
   }

@@ -12,6 +12,7 @@ const {
 const { HostOperations } = require("./host-operations.cjs");
 const { validateHostParams, validateHostResponse } = require("./host-validation.cjs");
 const { assertRegistrationOwnership } = require("./native-registration.cjs");
+const { IDEA_ORIGIN, IDEA_METHODS, IdeaBinding } = require("./idea-binding.cjs");
 const { listenTransport, describeTransport, transportKind } = require("../platform/transport.cjs");
 
 const ORIGIN = /^chrome-extension:\/\/[a-p]{32}\/$/;
@@ -126,6 +127,7 @@ class LmcpGateway {
     this.allowedOrigins = new Set();
     for (const origin of allowedOrigins) this.addAllowedOrigin(origin);
     this.descriptorPath = path.join(profile.root, "native-messaging", "lmcp-uds.json");
+    this.ideaBinding = new IdeaBinding(profile.root);
     this.operations = new HostOperations(
       path.join(profile.root, "native-messaging", "browser-invocations.json"),
     );
@@ -160,7 +162,8 @@ class LmcpGateway {
     if (changed) {
       this.writeDescriptor();
       for (const client of this.sockets || [])
-        if (!next.has(client.origin)) client.socket.destroy();
+        if (client.origin && client.origin !== IDEA_ORIGIN && !next.has(client.origin))
+          client.socket.destroy();
     }
   }
   // 设置页可显式刷新；外部隔离CLI登记则由定时检查发现。只信当前profile完整注册。
@@ -261,6 +264,12 @@ class LmcpGateway {
         this.lastError = "本机连接服务发生错误";
       });
       this.writeDescriptor();
+      try {
+        this.ideaBinding.publish(this.transportKind, this.socketPath, this.instanceId);
+      } catch {
+        // IDEA 发现文件权限异常时，浏览器连接仍可用。
+        this.ideaDiscoveryError = "IDEA 发现文件未能安全写入";
+      }
       this.watchRegistrations();
       return this.status();
     } catch (error) {
@@ -313,22 +322,27 @@ class LmcpGateway {
     decoder.on("error", () => socket.destroy());
     decoder.on("message", (message) => {
       if (!client.authorized) {
-        if (
-          message?.kind !== "transport-auth" ||
-          !equalToken(message.token, this.token) ||
-          !ORIGIN.test(message.extensionOrigin || "") ||
-          !this.allowedOrigins.has(message.extensionOrigin)
-        ) {
+        const browser =
+          message?.kind === "transport-auth" &&
+          equalToken(message.token, this.token) &&
+          ORIGIN.test(message.extensionOrigin || "") &&
+          this.allowedOrigins.has(message.extensionOrigin);
+        const idea = this.ideaBinding.authenticate(message);
+        if (!browser && !idea) {
           socket.destroy();
           return;
         }
         clearTimeout(timer);
         client.authorized = true;
-        client.origin = message.extensionOrigin;
+        client.origin = idea ? IDEA_ORIGIN : message.extensionOrigin;
         writer.send({ kind: "transport-ready", instanceId: this.instanceId });
         return;
       }
       if (message?.kind === "host-response") {
+        if (client.origin === IDEA_ORIGIN) {
+          socket.destroy();
+          return;
+        }
         this.receiveHostResponse(client, message);
         return;
       }
@@ -429,6 +443,10 @@ class LmcpGateway {
     }
     if (!DESKTOP_METHODS.has(envelope.method)) {
       client.writer.send(protocolError(envelope, "CAPABILITY_UNAVAILABLE", "桌面未提供这个接口"));
+      return;
+    }
+    if (client.origin === IDEA_ORIGIN && !IDEA_METHODS.has(envelope.method)) {
+      client.writer.send(protocolError(envelope, "FORBIDDEN", "IDEA 连接仅授权查词"));
       return;
     }
     const now = Date.now();
@@ -946,6 +964,7 @@ class LmcpGateway {
       transport: this.transportKind || transportKind(),
       descriptorPath: this.descriptorPath,
       lastError: this.lastError,
+      ideaDiscoveryError: this.ideaDiscoveryError || null,
       activeRequests: this.active,
       cleanupPendingCount: Math.max(0, this.lifecyclePorts.size - this.connections.size),
       socketCount: this.sockets.size,
@@ -971,6 +990,7 @@ class LmcpGateway {
   }
   async closeInternal() {
     if (this.starting) await this.starting.catch(() => {});
+    this.ideaBinding.close(this.instanceId);
     // net.Server.close 的回调可能早于 Socket close 事件；先登记并等每条生命周期清理。
     const closedSockets = [...this.sockets].map(
       (client) => new Promise((resolve) => client.socket.once("close", resolve)),
