@@ -1,6 +1,5 @@
-发行：发布 Desktop 1.1.0 并接入 IDEA 只读连接
+修复：通过 Desktop 1.1.0 连接状态与依赖审计门禁
 
-- 发布同用户发现描述符与独立握手密钥，固定 IDEA 来源和只读方法范围。
-- 支持桌面设置识别 IDEA、发起邀请、观察连接状态和断开。
-- 同步 Core 授权测试，保留 Browser Native Messaging 回归。
-- 同步 Core 1.1.0 与三平台发行说明，修复共享宿主目录下的浏览器发现。
+- 保持正常的连接状态字段，仅在 IDEA 发现失败时返回诊断。
+- 更新 follow-redirects、qs 与 serialize-javascript 的锁定版本，保留生产依赖审计。
+- 明确 Ubuntu 安装冒烟中 libfuse2 的版本回退分支。

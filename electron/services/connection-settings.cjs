@@ -106,7 +106,8 @@ class ConnectionSettings {
       transport: {
         running: status.running,
         lastError: status.lastError,
-        ideaDiscoveryError: status.ideaDiscoveryError,
+        // 只在 IDEA 发现失败时补充诊断，正常状态保持原有返回结构。
+        ...(status.ideaDiscoveryError ? { ideaDiscoveryError: status.ideaDiscoveryError } : {}),
         connections: status.connections,
       },
       registration: {

@@ -366,7 +366,11 @@ jobs:
           name: pkg-ubuntu-24.04-x64
           path: pkg
       - name: Install Linux display for AppImage/deb launch
-        run: sudo apt-get update -qq && sudo apt-get install -y xvfb libfuse2t64 || sudo apt-get install -y xvfb libfuse2
+        run: |
+          sudo apt-get update -qq
+          if ! sudo apt-get install -y xvfb libfuse2t64; then
+            sudo apt-get install -y xvfb libfuse2
+          fi
       - name: Locate installer
         env:
           KIND: ${{ matrix.kind }}
