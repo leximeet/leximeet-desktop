@@ -79,8 +79,12 @@ test("看词选义经 Core 判分，同题订正不加分，新尝试可以计�
   await capture(desktop, "choice-narrow-dark");
   await resizeDesktop(desktop, 1321, 896);
   await page.getByRole("button", { name: "切换明亮主题", exact: true }).click();
-  await page.getByRole("tab", { name: "单词临摹", exact: true }).click();
+  const copyTab = page.getByRole("tab", { name: "单词临摹", exact: true });
+  await copyTab.click();
+  await expect(copyTab).toHaveAttribute("aria-selected", "true");
+  // 题型切换会异步加载题目，等输入框解除禁用后再逐字键入。
   const field = page.getByRole("textbox", { name: "练习答案" });
+  await expect(field).toBeEditable();
   await field.pressSequentially("alpX");
   await expect(page.locator(".spelling-letters .typed")).toHaveCount(3);
   await expect(page.locator(".spelling-letters .wrong")).toHaveCount(1);

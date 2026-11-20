@@ -168,7 +168,14 @@ jobs:
           # 真实 Electron 窗口在 Linux 的私有 X11 会话中运行。
           prefix=()
           if [[ "$RUNNER_OS" = Linux ]]; then prefix=(xvfb-run -a); fi
-          if "${prefix[@]}" npm run test:install; then
+          mkdir -p test-results
+          log="test-results/installer-first-attempt.log"
+          if "${prefix[@]}" npm run test:install 2>&1 | tee "$log"; then
+            node scripts/record-package-check.cjs install passed
+          elif [[ "$RUNNER_OS" == Windows ]] &&
+            grep -qE 'NAMED_PIPE_ACL_FAILED:.*ETIMEDOUT' "$log" &&
+            npm run test:install; then
+            # Windows 冷启动的 PowerShell 超时仅重试一次，并重新执行安装和真实应用检查。
             node scripts/record-package-check.cjs install passed
           else
             node scripts/record-package-check.cjs install failed
@@ -291,11 +298,25 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 30
+      - name: 检出本次工作流使用的发行脚本
+        if: needs.preflight.outputs.release_tag != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          path: .runtime/release-tooling
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            scripts/prepare-github-release.cjs
+            scripts/lib/package-output.cjs
+          persist-credentials: false
       - name: 准备原样验收的正式下载附件
         if: needs.preflight.outputs.release_tag != ''
+        env:
+          LEXIMEET_RELEASE_SOURCE_ROOT: ${{ github.workspace }}
         run: |
           node - <<'NODE'
-          require('./scripts/prepare-github-release.cjs')
+          // 手动恢复按工作流版本运行归档逻辑，构建、验证和完整源码继续使用原标签。
+          require('./.runtime/release-tooling/scripts/prepare-github-release.cjs')
             .prepare(require('node:path').resolve('.runtime/github-release'), process.env.LEXIMEET_RELEASE_TAG)
             .then(result => console.log(`发行附件检查通过：${result.version} ${result.commit}`))
             .catch(error => { console.error(error.message); process.exitCode = 1; });
@@ -339,21 +360,34 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "24"
+      - name: 检出本次工作流使用的发行脚本
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          path: .runtime/release-tooling
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            scripts/prepare-github-release.cjs
+            scripts/lib/package-output.cjs
+          persist-credentials: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: desktop-release-files-*
           path: .runtime/github-release-parts/
           merge-multiple: false
       - name: 合并三端附件并复核摘要
+        env:
+          LEXIMEET_RELEASE_SOURCE_ROOT: ${{ github.workspace }}
         run: |
           node - <<'NODE'
           const fs = require('node:fs');
           const path = require('node:path');
           const root = path.resolve('.runtime/github-release-parts');
           const inputs = fs.readdirSync(root).map((name) => path.join(root, name));
-          require('./scripts/prepare-github-release.cjs')
-            .merge(inputs, path.resolve('.runtime/github-release'), process.env.LEXIMEET_RELEASE_TAG)
-            .then(() => require('./scripts/prepare-github-release.cjs').verify(path.resolve('.runtime/github-release'), process.env.LEXIMEET_RELEASE_TAG))
+          const tooling = require('./.runtime/release-tooling/scripts/prepare-github-release.cjs');
+          const output = path.resolve('.runtime/github-release');
+          tooling.merge(inputs, output, process.env.LEXIMEET_RELEASE_TAG)
+            .then(() => tooling.verify(output, process.env.LEXIMEET_RELEASE_TAG))
             .then(result => console.log(`发行附件检查通过：${result.version} ${result.commit}`))
             .catch(error => { console.error(error.message); process.exitCode = 1; });
           NODE

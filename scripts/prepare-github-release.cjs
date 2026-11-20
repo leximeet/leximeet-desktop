@@ -6,7 +6,8 @@ const crypto = require("node:crypto");
 const { execFileSync } = require("node:child_process");
 const { resolvePackageOutput } = require("./lib/package-output.cjs");
 
-const root = path.resolve(__dirname, "..");
+// 恢复正式发布时，脚本可来自新工作流，所有源码校验仍在原标签的检出目录运行。
+const root = path.resolve(process.env.LEXIMEET_RELEASE_SOURCE_ROOT || path.join(__dirname, ".."));
 const read = (directory, file) => JSON.parse(fs.readFileSync(path.join(directory, file), "utf8"));
 const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 
@@ -39,6 +40,27 @@ function expectedArtifacts(tag, platform, arch) {
   const entry = matrixEntry(platform, arch);
   if (!entry) throw new Error("不在发布矩阵内的平台");
   return entry.artifacts(tag);
+}
+
+function normalizeLinuxArtifactNames(manifest, tag) {
+  if (
+    manifest.platform !== "linux" ||
+    manifest.arch !== "x64" ||
+    !Array.isArray(manifest.artifacts)
+  )
+    return manifest;
+  // electron-builder 按安装格式使用不同架构别名。发布时统一为下载页和更新源约定的 x64。
+  const aliases = new Map([
+    [`LexiMeet-${tag}-linux-x86_64.AppImage`, `LexiMeet-${tag}-linux-x64.AppImage`],
+    [`LexiMeet-${tag}-linux-amd64.deb`, `LexiMeet-${tag}-linux-x64.deb`],
+  ]);
+  return {
+    ...manifest,
+    artifacts: manifest.artifacts.map((artifact) => {
+      const file = aliases.get(artifact.file);
+      return file ? { ...artifact, file, buildFile: artifact.file } : artifact;
+    }),
+  };
 }
 
 /** 发布仅接受矩阵内、经过真实安装验证、源码与版本均吻合的载荷。 */
@@ -118,27 +140,37 @@ async function prepare(output, tag = process.env.GITHUB_REF_NAME) {
   const archives = path.join(root, "candidate-output");
   const metadata = read(archives, "metadata.json");
   const source = read(archives, "SOURCE_METADATA.json");
-  const manifest = read(packageOutput, "BUILD-MANIFEST.json");
+  const builtManifest = read(packageOutput, "BUILD-MANIFEST.json");
+  const manifest = normalizeLinuxArtifactNames(builtManifest, tag);
   validateCandidate({ tag, commit, coreCommit, metadata, source, manifest });
   if (git("status", "--porcelain") || read(root, "package.json").version !== tag)
     throw new Error("发布要求已提交且版本一致的源码");
-  await verifyFiles(packageOutput, manifest.artifacts);
+  await verifyFiles(packageOutput, builtManifest.artifacts);
   await verifyFiles(archives, source.sources);
   // 新目录保存原样通过检查的附件，不重新构建，也不复制解压的 .app。
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.mkdirSync(output);
-  for (const item of manifest.artifacts)
-    fs.copyFileSync(path.join(packageOutput, item.file), path.join(output, item.file));
+  for (const [index, item] of manifest.artifacts.entries()) {
+    const builtFile = builtManifest.artifacts[index].file;
+    fs.copyFileSync(path.join(packageOutput, builtFile), path.join(output, item.file));
+  }
   for (const item of source.sources)
     fs.copyFileSync(path.join(archives, item.file), path.join(output, item.file));
   fs.copyFileSync(
     path.join(archives, "SOURCE_METADATA.json"),
     path.join(output, "SOURCE_METADATA.json"),
   );
-  fs.copyFileSync(
-    path.join(packageOutput, "BUILD-MANIFEST.json"),
-    path.join(output, "BUILD-MANIFEST.json"),
-  );
+  if (manifest === builtManifest) {
+    fs.copyFileSync(
+      path.join(packageOutput, "BUILD-MANIFEST.json"),
+      path.join(output, "BUILD-MANIFEST.json"),
+    );
+  } else {
+    fs.writeFileSync(
+      path.join(output, "BUILD-MANIFEST.json"),
+      `${JSON.stringify(manifest, null, 2)}\n`,
+    );
+  }
   fs.copyFileSync(path.join(root, "LICENSE"), path.join(output, "LICENSE"));
   const files = await Promise.all(
     fs
@@ -367,6 +399,7 @@ if (require.main === module) {
 }
 module.exports = {
   validateCandidate,
+  normalizeLinuxArtifactNames,
   verifyFiles,
   prepare,
   verify,

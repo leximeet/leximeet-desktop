@@ -9,6 +9,7 @@ const {
   validateCandidate,
   verifyFiles,
   expectedArtifacts,
+  normalizeLinuxArtifactNames,
   merge,
   RELEASE_MATRIX,
 } = require("../../scripts/prepare-github-release.cjs");
@@ -118,6 +119,26 @@ test("发布矩阵覆盖三端安装包，缺一端不能合并", async () => {
     },
   };
   validateCandidate(linux);
+  const builtFiles = ["LexiMeet-1.0.2-linux-x86_64.AppImage", "LexiMeet-1.0.2-linux-amd64.deb"];
+  const builtManifest = {
+    ...linux.manifest,
+    artifacts: builtFiles.map((file) => ({ file, bytes: 42, sha256: hash })),
+  };
+  const published = normalizeLinuxArtifactNames(builtManifest, linux.tag);
+  validateCandidate({ ...linux, manifest: published });
+  assert.deepEqual(
+    published.artifacts,
+    expectedArtifacts(linux.tag, "linux", "x64").map((file, index) => ({
+      file,
+      buildFile: builtFiles[index],
+      bytes: 42,
+      sha256: hash,
+    })),
+  );
+  assert.deepEqual(
+    builtManifest.artifacts.map((item) => item.file),
+    builtFiles,
+  );
   linux.manifest.artifacts.pop();
   assert.throws(() => validateCandidate(linux), /缺少同版本安装包/);
   await assert.rejects(merge(["/tmp/one"], "/tmp/out", "1.0.2"), /三端齐套/);
