@@ -175,8 +175,12 @@ test("七个业务日：学三天、休一天、再学三天，真实六模式�
         ["听音辨词", 16],
         ["语境填空", 18],
       ]) {
-        await page.getByRole("tab", { name, exact: true }).click();
+        const tab = page.getByRole("tab", { name, exact: true });
+        await tab.click();
+        // 草稿保存期间旧输入框还在；等新题型选中并可编辑后再开始键入。
+        await expect(tab).toHaveAttribute("aria-selected", "true");
         const input = page.getByRole("textbox", { name: "练习答案", exact: true });
+        await expect(input).toBeEditable();
         await expect(input).toHaveValue("");
         await expect(page.locator(".practice-stage")).not.toHaveClass(/\bcorrect\b/);
         await input.pressSequentially("apple", { delay: 15 });
