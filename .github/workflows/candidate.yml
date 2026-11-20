@@ -15,6 +15,11 @@ on:
         type: string
         required: false
         default: ""
+      verified_tag_run_id:
+        description: "可选：原标签已通过完整 CI 门禁的发布 run ID"
+        type: string
+        required: false
+        default: ""
       previous_candidate_run_id:
         description: "可选：同仓已成功的旧 Desktop candidate run ID；版本必须低于本次版本"
         type: string
@@ -41,6 +46,7 @@ jobs:
     outputs:
       source_ref: ${{ steps.target.outputs.source_ref }}
       release_tag: ${{ steps.target.outputs.release_tag }}
+      verified_tag_run_id: ${{ steps.target.outputs.verified_tag_run_id }}
     steps:
       - name: Require the repository default branch and a trusted baseline
         id: target
@@ -50,6 +56,7 @@ jobs:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           REQUESTED_RELEASE_TAG: ${{ inputs.release_tag }}
           REQUESTED_VERSION: ${{ inputs.version }}
+          VERIFIED_TAG_RUN_ID: ${{ inputs.verified_tag_run_id }}
         run: |
           node - <<'NODE'
           (async () => {
@@ -79,7 +86,31 @@ jobs:
               const existing = await fetch(`${api}/releases/tags/${tag}`, { headers });
               if (existing.status !== 404) throw new Error('发行已存在或状态无法确认，拒绝覆盖。');
             }
-            require('node:fs').appendFileSync(process.env.GITHUB_OUTPUT, `source_ref=${source}\nrelease_tag=${tag}\n`);
+            const verified = process.env.VERIFIED_TAG_RUN_ID || '';
+            if (verified) {
+              if (!manual || !tag || !/^[1-9]\d*$/.test(verified)) {
+                throw new Error('复用门禁须为正式标签恢复，并指定有效的原标签 run ID。');
+              }
+              const runUrl = `${api}/actions/runs/${verified}`;
+              const response = await fetch(runUrl, { headers });
+              if (!response.ok) throw new Error(`无法读取原标签运行：HTTP ${response.status}`);
+              const run = await response.json();
+              if (run.path !== '.github/workflows/candidate.yml' || run.event !== 'push' ||
+                  run.status !== 'completed' || run.head_branch !== tag || run.head_sha !== source ||
+                  run.head_repository?.full_name !== process.env.GITHUB_REPOSITORY) {
+                throw new Error('原标签运行必须来自同仓、同标签和同一提交。');
+              }
+              const jobsResponse = await fetch(`${runUrl}/jobs?filter=latest&per_page=100`, { headers });
+              if (!jobsResponse.ok) throw new Error(`无法读取原标签作业：HTTP ${jobsResponse.status}`);
+              const { jobs, total_count: total } = await jobsResponse.json();
+              const gates = jobs.filter(job => job.name.startsWith('checks / '));
+              if (jobs.length !== total || gates.length < 11 || gates.some(job => job.conclusion !== 'success')) {
+                throw new Error('原标签的完整 CI 门禁尚未全部成功。');
+              }
+              console.log(`复用同一源码的 ${gates.length} 项完整 CI 门禁（run ${verified}）`);
+            }
+            require('node:fs').appendFileSync(process.env.GITHUB_OUTPUT,
+              `source_ref=${source}\nrelease_tag=${tag}\nverified_tag_run_id=${verified}\n`);
             const id = process.env.PREVIOUS_RUN_ID;
             if (!id) return;
             if (!/^[1-9]\d*$/.test(id)) throw new Error('旧 run ID 必须是正整数。');
@@ -98,6 +129,7 @@ jobs:
 
   checks:
     needs: preflight
+    if: needs.preflight.outputs.verified_tag_run_id == ''
     uses: ./.github/workflows/ci.yml
     with:
       source_ref: ${{ needs.preflight.outputs.source_ref }}
@@ -105,6 +137,10 @@ jobs:
   candidate:
     name: Candidate (${{ matrix.os }}, ${{ matrix.arch }})
     needs: [preflight, checks]
+    if: >-
+      !cancelled() && needs.preflight.result == 'success' &&
+      (needs.checks.result == 'success' ||
+      (needs.checks.result == 'skipped' && needs.preflight.outputs.verified_tag_run_id != ''))
     strategy:
       fail-fast: false
       matrix:
@@ -147,6 +183,7 @@ jobs:
           mkdir -p test-results/package-materials
           node scripts/verify-package-materials.cjs > test-results/package-materials/results.json
       - name: 准备安装验收的固定 Full 增量资源
+        if: runner.os != 'Windows' || inputs.previous_candidate_run_id != ''
         run: |
           node - <<'NODE'
           // 新 runner 不共享 checks 的缓存；只准备测试源，不改变已打包的 Core 词典。
@@ -164,18 +201,35 @@ jobs:
           fs.appendFileSync(process.env.GITHUB_ENV, `LEXIMEET_PACKAGED_EXECUTABLE=${executable}\n`);
           NODE
       - name: Verify installer and installed application
+        if: runner.os != 'Windows'
         run: |
           # 真实 Electron 窗口在 Linux 的私有 X11 会话中运行。
           prefix=()
           if [[ "$RUNNER_OS" = Linux ]]; then prefix=(xvfb-run -a); fi
-          mkdir -p test-results
-          log="test-results/installer-first-attempt.log"
-          if "${prefix[@]}" npm run test:install 2>&1 | tee "$log"; then
+          if "${prefix[@]}" npm run test:install; then
             node scripts/record-package-check.cjs install passed
-          elif [[ "$RUNNER_OS" == Windows ]] &&
-            grep -qE 'NAMED_PIPE_ACL_FAILED:.*ETIMEDOUT' "$log" &&
-            npm run test:install; then
-            # Windows 冷启动的 PowerShell 超时仅重试一次，并重新执行安装和真实应用检查。
+          else
+            node scripts/record-package-check.cjs install failed
+            exit 1
+          fi
+      - name: 核对 Windows 安装期间 Defender 实时保护
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          foreach ($attempt in 1..6) {
+            try { Set-MpPreference -DisableRealtimeMonitoring $false } catch { Write-Warning $_ }
+            if ((Get-MpComputerStatus).RealTimeProtectionEnabled) { exit 0 }
+            Start-Sleep -Seconds 2
+          }
+          throw "Windows 候选包需要在 Defender 实时保护开启时验收"
+      - name: 验证 Windows NSIS 的正常安装、启动、查词和卸载
+        if: runner.os == 'Windows'
+        run: |
+          # 与已通过的独立 Windows 安装门禁使用相同入口，直接启动候选安装器及其安装的应用。
+          LEXIMEET_INSTALLER="$(node scripts/artifacts.cjs find-installer)"
+          export LEXIMEET_INSTALLER LEXIMEET_INSTALL_KIND=nsis
+          mkdir -p test-results
+          if npm run test:install-smoke 2>&1 | tee test-results/windows-installed-smoke.log; then
             node scripts/record-package-check.cjs install passed
           else
             node scripts/record-package-check.cjs install failed
