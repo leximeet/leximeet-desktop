@@ -132,6 +132,13 @@ jobs:
       - uses: ./.github/actions/setup-ci
       - name: Install Playwright Chromium
         run: npx playwright install chromium
+      - name: Prepare the virtual display for Linux installer verification
+        if: runner.os == 'Linux'
+        run: |
+          if ! command -v xvfb-run >/dev/null || ! command -v xauth >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y xvfb xauth
+          fi
       - name: Build candidate installers with bundled Java
         run: npm run package:dist
       - name: Verify candidate Core and actual packaged materials
@@ -158,7 +165,10 @@ jobs:
           NODE
       - name: Verify installer and installed application
         run: |
-          if npm run test:install; then
+          # 真实 Electron 窗口在 Linux 的私有 X11 会话中运行。
+          prefix=()
+          if [[ "$RUNNER_OS" = Linux ]]; then prefix=(xvfb-run -a); fi
+          if "${prefix[@]}" npm run test:install; then
             node scripts/record-package-check.cjs install passed
           else
             node scripts/record-package-check.cjs install failed
@@ -200,11 +210,16 @@ jobs:
           NODE
       - name: Verify upgrade and persisted profile
         if: inputs.previous_candidate_run_id != ''
-        run: npm run test:upgrade
+        run: |
+          prefix=()
+          if [[ "$RUNNER_OS" = Linux ]]; then prefix=(xvfb-run -a); fi
+          "${prefix[@]}" npm run test:upgrade
       - name: Verify installation replacement and profile migration
         if: inputs.previous_candidate_run_id != ''
         run: |
-          if npm run test:install:upgrade; then
+          prefix=()
+          if [[ "$RUNNER_OS" = Linux ]]; then prefix=(xvfb-run -a); fi
+          if "${prefix[@]}" npm run test:install:upgrade; then
             node scripts/record-package-check.cjs upgrade passed
           else
             node scripts/record-package-check.cjs upgrade failed
