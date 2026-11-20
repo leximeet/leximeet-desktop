@@ -109,8 +109,9 @@ jobs:
               }
               console.log(`复用同一源码的 ${gates.length} 项完整 CI 门禁（run ${verified}）`);
             }
+            const outputs = `source_ref=${source}\nrelease_tag=${tag}\n`;
             require('node:fs').appendFileSync(process.env.GITHUB_OUTPUT,
-              `source_ref=${source}\nrelease_tag=${tag}\nverified_tag_run_id=${verified}\n`);
+              verified ? outputs + `verified_tag_run_id=${verified}\n` : outputs);
             const id = process.env.PREVIOUS_RUN_ID;
             if (!id) return;
             if (!/^[1-9]\d*$/.test(id)) throw new Error('旧 run ID 必须是正整数。');
@@ -398,7 +399,10 @@ jobs:
 
   release:
     name: Publish verified release
-    if: needs.preflight.outputs.release_tag != ''
+    # 复用成功门禁时 checks 作业显示为 skipped，实际发行仍要求本轮三个候选全部通过。
+    if: >-
+      !cancelled() && needs.preflight.result == 'success' && needs.candidate.result == 'success' &&
+      needs.preflight.outputs.release_tag != ''
     needs: [preflight, candidate]
     runs-on: ubuntu-24.04
     timeout-minutes: 15

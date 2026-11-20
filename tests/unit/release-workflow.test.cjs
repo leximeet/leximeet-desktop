@@ -20,6 +20,8 @@ async function preflight({
   refType = "tag",
   targetType = "commit",
   releaseStatus = 404,
+  runFields = {},
+  gateConclusions = Array(11).fill("success"),
 } = {}) {
   const output = [];
   const errors = [];
@@ -41,7 +43,7 @@ async function preflight({
   };
   await vm.runInNewContext(script, {
     process,
-    console: { error: (message) => errors.push(message) },
+    console: { log() {}, error: (message) => errors.push(message) },
     require: (name) => {
       assert.equal(name, "node:fs");
       return { appendFileSync: (_file, value) => output.push(value) };
@@ -52,11 +54,31 @@ async function preflight({
       return {
         status,
         ok: status >= 200 && status < 300,
-        json: async () => ({
-          object: url.includes("/git/ref/")
-            ? { type: refType, sha: "c".repeat(40) }
-            : { type: targetType, sha: taggedCommit },
-        }),
+        json: async () => {
+          if (url.endsWith("/actions/runs/123")) {
+            return {
+              path: ".github/workflows/candidate.yml",
+              event: "push",
+              status: "completed",
+              head_branch: "1.0.0",
+              head_sha: taggedCommit,
+              head_repository: { full_name: "leximeet/leximeet-desktop" },
+              ...runFields,
+            };
+          }
+          if (url.includes("/actions/runs/123/jobs")) {
+            const jobs = gateConclusions.map((conclusion, index) => ({
+              name: `checks / gate ${index + 1}`,
+              conclusion,
+            }));
+            return { total_count: jobs.length, jobs };
+          }
+          return {
+            object: url.includes("/git/ref/")
+              ? { type: refType, sha: "c".repeat(40) }
+              : { type: targetType, sha: taggedCommit },
+          };
+        },
       };
     },
   });
@@ -89,6 +111,29 @@ test("普通人工候选仅检查当前源码，不触发正式发行", async ()
   assert.equal(result.output, `source_ref=${mainCommit}\nrelease_tag=\n`);
   assert.equal(result.requests.length, 0);
 });
+
+test("复用同一标签提交的完整成功门禁", async () => {
+  const result = await preflight({ env: { VERIFIED_TAG_RUN_ID: "123" } });
+  assert.equal(result.code, 0);
+  assert.equal(
+    result.output,
+    `source_ref=${taggedCommit}\nrelease_tag=1.0.0\nverified_tag_run_id=123\n`,
+  );
+  assert.equal(result.requests.length, 5);
+});
+
+for (const [label, options, error] of [
+  ["不同源码", { runFields: { head_sha: mainCommit } }, /同一提交/],
+  ["缺少作业", { gateConclusions: Array(10).fill("success") }, /完整 CI 门禁/],
+  ["作业失败", { gateConclusions: [...Array(10).fill("success"), "failure"] }, /完整 CI 门禁/],
+]) {
+  test(`${label}时拒绝复用原标签门禁`, async () => {
+    const result = await preflight({ env: { VERIFIED_TAG_RUN_ID: "123" }, ...options });
+    assert.equal(result.code, 1);
+    assert.equal(result.output, "");
+    assert.match(result.errors[0], error);
+  });
+}
 
 for (const releaseStatus of [200, 403, 500]) {
   test(`已有发行或无法确认（HTTP ${releaseStatus}）拒绝覆盖`, async () => {
