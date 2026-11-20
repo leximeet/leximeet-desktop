@@ -37,7 +37,11 @@ test("CI 按平台拆开 smoke，lint 不阻塞，超时与 concurrency 符合�
     "utf8",
   );
   assert.equal(packagePlaywright.includes("prepare-full-dictionary"), true);
-  assert.equal(setup.includes("cache: maven"), true);
+  // 缓存必须跟随 Maven 实际使用的仓库，并随子模块的依赖与源配置变化。
+  assert.match(
+    setup,
+    /path: \.runtime\/m2\s+key: .*hashFiles\('core-java\/pom\.xml', 'core-java\/maven-settings\.xml'\)/,
+  );
   assert.equal(setup.includes(".runtime/electron-cache"), true);
   assert.equal(setup.includes(".runtime/dictionary-source"), true);
   assert.equal(setup.includes("text-dictionary-index.cjs"), true);
