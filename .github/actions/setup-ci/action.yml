@@ -19,7 +19,12 @@ runs:
       with:
         distribution: temurin
         java-version: "21"
-        cache: maven
+    - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      if: ${{ inputs.java == 'true' }}
+      with:
+        # 缓存实际传给 Maven 的仓库，而非 Maven 的默认目录。
+        path: .runtime/m2
+        key: java-core-m2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('core-java/pom.xml', 'core-java/maven-settings.xml') }}
     - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
       if: ${{ inputs.java == 'true' }}
       with:

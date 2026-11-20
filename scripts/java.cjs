@@ -45,6 +45,7 @@ function runMaven(goal = "test") {
   if (!["test", "package", "benchmark-index"].includes(goal))
     throw new Error("只支持 test / package / benchmark-index");
   const benchmarkOutput = path.join(root, "test-results", "performance", "lmcp-index-50000.json");
+  const repo = path.join(root, ".runtime", "m2");
   const args = [
     "-B",
     "-ntp",
@@ -52,7 +53,15 @@ function runMaven(goal = "test") {
     path.join(root, "core-java", "maven-settings.xml"),
     "-s",
     path.join(root, "core-java", "maven-settings.xml"),
-    `-Dmaven.repo.local=${path.join(root, ".runtime", "m2")}`,
+    `-Dmaven.repo.local=${repo}`,
+    // CI 可遇到镜像短暂返回 404；刷新缺失项，不复用 Maven 当日的负向缓存。
+    ...(process.env.GITHUB_ACTIONS === "true"
+      ? [
+          "-U",
+          "-Daether.connector.http.retryHandler.count=5",
+          "-Daether.connector.http.retryHandler.serviceUnavailable=429,503",
+        ]
+      : []),
     // Boot repackage 会替换原 jar；强制生成普通 jar 后再包装，避免重复包装旧产物。
     ...(goal === "package"
       ? ["-DskipTests", "-Dmaven.jar.forceCreation=true"]
