@@ -151,7 +151,12 @@ function registerNativeHost({
     if (!fs.existsSync(recordPath)) throw new Error("NATIVE_REGISTRATION_NOT_OWNED");
     assertRegistrationOwnership(readPrivateJson(recordPath));
   }
-  if (platform !== "win32") ensureRegistrationDirectory(path.dirname(manifestPath));
+  if (platform !== "win32") {
+    // 测试浏览器根由词遇创建，重复调用隔离注册时仍必须通过私有目录检查。
+    // 日常浏览器的共享登记目录继续使用独立策略，不改变浏览器根的权限。
+    if (isolated) ensurePrivateDirectory(browserDataDir);
+    ensureRegistrationDirectory(path.dirname(manifestPath));
+  }
   const origins = extensionIds.map((id) => `chrome-extension://${id}/`);
   const origin = origins[0];
   const manifest = {

@@ -95,6 +95,8 @@ test("CLI 注册固定新 Host 并只修改本人记录，外来 manifest 保持
   const ownManifest = JSON.parse(fs.readFileSync(result.manifestPath, "utf8"));
   assert.deepEqual(ownManifest.allowed_origins, [`chrome-extension://${"a".repeat(32)}/`]);
   assert(!JSON.stringify(result).includes("sessionToken"));
+  if (process.platform !== "win32")
+    assert.equal(fs.statSync(f.input.browserDataDir).mode & 0o777, 0o700);
   registerIsolatedHost(f.input);
   unregisterNativeHost(readPrivateJson(result.recordPath));
   const foreign = '{"name":"org.leximeet.browser","path":"/someone-else"}\n';
